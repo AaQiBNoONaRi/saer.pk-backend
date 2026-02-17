@@ -6,7 +6,29 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config.database import db_config
 from app.config.settings import settings
-from app.routes import organization, branch, agency, employee, hotel, flight, transport, admin, others, package, branch_auth, agency_auth, discount, commission, service_charge
+from app.routes import (
+    organization,
+    branch,
+    agency,
+    employee,
+    hotel, # Old name, might need rename if I changed the file name
+    flight,
+    transport,
+    admin,
+    others,
+    package,
+    branch_auth,
+    agency_auth,
+    discount,
+    commission,
+    service_charge,
+    # Hotel PMS Routers
+    hotel_category,
+    bed_type,
+    hotel_floor,
+    hotel_room,
+    hotel_room_booking
+)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,6 +64,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Request logging middleware
+from fastapi import Request
+import time
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start_time = time.time()
+    print(f"\n🌐 {request.method} {request.url.path}")
+    response = await call_next(request)
+    duration = time.time() - start_time
+    print(f"✅ {request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
+    return response
+
 # Mount static files
 from fastapi.staticfiles import StaticFiles
 import os
@@ -56,7 +91,15 @@ app.include_router(branch_auth.router, prefix="/api")
 app.include_router(agency.router, prefix="/api")
 app.include_router(agency_auth.router, prefix="/api")
 app.include_router(employee.router, prefix="/api")
-app.include_router(hotel.router, prefix="/api")
+# Hotel Inventory System
+app.include_router(hotel.router, prefix="/api") # Main Hotel Router
+app.include_router(hotel_category.router, prefix="/api")
+app.include_router(bed_type.router, prefix="/api")
+app.include_router(hotel_floor.router, prefix="/api")
+app.include_router(hotel_room.router, prefix="/api")
+app.include_router(hotel_room_booking.router, prefix="/api")
+
+# Other Routers
 app.include_router(flight.router, prefix="/api")
 app.include_router(transport.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")

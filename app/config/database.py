@@ -83,3 +83,10 @@ class Collections:
     DISCOUNTS = "discounts"
     COMMISSIONS = "commissions"
     SERVICE_CHARGES = "service_charges"
+    
+    # Hotel PMS Collections
+    HOTEL_CATEGORIES = "hotel_categories"
+    BED_TYPES = "bed_types"
+    HOTEL_FLOORS = "hotel_floors"
+    HOTEL_ROOMS = "hotel_rooms"
+    HOTEL_ROOM_BOOKINGS = "hotel_room_bookings"
