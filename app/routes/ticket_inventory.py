@@ -22,6 +22,14 @@ async def create_ticket_inventory(
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new ticket inventory entry"""
+    # Force organization_id from current user
+    if current_user.get("user_type") == "organization":
+        ticket.organization_id = current_user.get("organization_id")
+    elif not ticket.organization_id:
+        # If admin doesn't provide org_id, maybe error or allow? 
+        # For now, let's require it or use their own org_id if they have one
+        ticket.organization_id = current_user.get("organization_id")
+        
     ticket_dict = ticket.model_dump()
     created_ticket = await db_ops.create(Collections.TICKET_INVENTORY, ticket_dict)
     return serialize_doc(created_ticket)
@@ -38,6 +46,13 @@ async def get_ticket_inventory(
 ):
     """Get all ticket inventory with optional filtering"""
     filter_query = {}
+    
+    # Filter by organization if organization_id is present in token
+    # This applies to both organization users and admins bound to an organization
+    org_id = current_user.get("organization_id")
+    if org_id:
+        filter_query["organization_id"] = org_id
+    
     if group_name:
         filter_query["group_name"] = {"$regex": group_name, "$options": "i"}
     if group_type:
@@ -59,6 +74,14 @@ async def get_ticket_inventory_by_id(
     ticket = await db_ops.get_by_id(Collections.TICKET_INVENTORY, ticket_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="Ticket inventory not found")
+        
+    # Check permission
+    # If user has an organization_id, they can only view tickets from that organization
+    user_org_id = current_user.get("organization_id")
+    if user_org_id:
+        if ticket.get("organization_id") != user_org_id:
+             raise HTTPException(status_code=403, detail="Not authorized to view this ticket")
+             
     return serialize_doc(ticket)
 
 @router.put("/{ticket_id}", response_model=TicketInventoryResponse)

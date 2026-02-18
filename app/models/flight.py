@@ -33,6 +33,7 @@ class TripDetails(BaseModel):
 
 class FlightBase(BaseModel):
     # Trip configuration
+    organization_id: str = Field(..., description="ID of the organization that owns this flight inventory")
     trip_type: Literal["One-way", "Round-trip"] = "One-way"
     
     # Departure trip details
@@ -63,7 +64,7 @@ class FlightBase(BaseModel):
     pnr: Optional[str] = None
 
 class FlightCreate(FlightBase):
-    pass
+    organization_id: Optional[str] = None
 
 class FlightUpdate(BaseModel):
     trip_type: Optional[Literal["One-way", "Round-trip"]] = None
