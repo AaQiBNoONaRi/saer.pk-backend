@@ -83,3 +83,7 @@ class Collections:
     DISCOUNTS = "discounts"
     COMMISSIONS = "commissions"
     SERVICE_CHARGES = "service_charges"
+    
+    # Content Management Collections
+    BLOGS = "blogs"
+    FORMS = "forms"
