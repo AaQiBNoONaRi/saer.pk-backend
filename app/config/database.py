@@ -90,3 +90,7 @@ class Collections:
     HOTEL_FLOORS = "hotel_floors"
     HOTEL_ROOMS = "hotel_rooms"
     HOTEL_ROOM_BOOKINGS = "hotel_room_bookings"
+
+    # Shared Inventory Collections
+    ORG_LINKS = "org_links"
+    INVENTORY_SHARES = "inventory_shares"

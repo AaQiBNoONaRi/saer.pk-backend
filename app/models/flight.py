@@ -85,7 +85,9 @@ class FlightResponse(FlightBase):
     id: str = Field(alias="_id")
     created_at: datetime
     updated_at: datetime
-    
+    is_shared: Optional[bool] = False
+    shared_from_org_id: Optional[str] = None
+
     class Config:
         populate_by_name = True
         json_encoders = {

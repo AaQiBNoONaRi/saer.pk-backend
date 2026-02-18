@@ -27,7 +27,10 @@ from app.routes import (
     bed_type,
     hotel_floor,
     hotel_room,
-    hotel_room_booking
+    hotel_room_booking,
+    # Shared Inventory
+    org_links,
+    inventory_shares
 )
 
 @asynccontextmanager
@@ -108,6 +111,9 @@ app.include_router(package.router, prefix="/api")
 app.include_router(discount.router, prefix="/api")
 app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
+# Shared Inventory
+app.include_router(org_links.router, prefix="/api")
+app.include_router(inventory_shares.router, prefix="/api")
 
 @app.get("/")
 async def root():
