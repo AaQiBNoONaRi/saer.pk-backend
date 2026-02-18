@@ -17,6 +17,12 @@ async def create_flight(
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new flight ticket block"""
+    # Force organization_id from current user
+    if current_user.get("user_type") == "organization":
+        flight.organization_id = current_user.get("organization_id")
+    elif not flight.organization_id:
+        flight.organization_id = current_user.get("organization_id")
+
     flight_dict = flight.model_dump()
     created_flight = await db_ops.create(Collections.FLIGHTS, flight_dict)
     return serialize_doc(created_flight)
@@ -31,6 +37,13 @@ async def get_flights(
 ):
     """Get all flights with optional filtering"""
     filter_query = {}
+    
+    # Filter by organization if organization_id is present in token
+    # This applies to both organization users and admins bound to an organization
+    org_id = current_user.get("organization_id")
+    if org_id:
+        filter_query["organization_id"] = org_id
+    
     if airline:
         filter_query["departure_trip.airline"] = {"$regex": airline, "$options": "i"}
     if sector:
@@ -52,6 +65,14 @@ async def get_flight(
     flight = await db_ops.get_by_id(Collections.FLIGHTS, flight_id)
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
+        
+    # Check permission
+    # If user has an organization_id, they can only view flights from that organization
+    user_org_id = current_user.get("organization_id")
+    if user_org_id:
+        if flight.get("organization_id") != user_org_id:
+             raise HTTPException(status_code=403, detail="Not authorized to view this flight")
+             
     return serialize_doc(flight)
 
 @router.put("/{flight_id}", response_model=FlightResponse)

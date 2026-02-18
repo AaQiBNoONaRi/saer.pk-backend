@@ -34,6 +34,7 @@ class TripDetails(BaseModel):
 
 class TicketInventoryBase(BaseModel):
     # Group information
+    organization_id: str = Field(..., description="ID of the organization that owns this inventory")
     group_name: str = Field(..., min_length=1, max_length=200)
     group_type: str = Field(..., description="e.g., Umrah, Hajj, Tourism")
     
@@ -62,7 +63,7 @@ class TicketInventoryBase(BaseModel):
     pnr: Optional[str] = None
 
 class TicketInventoryCreate(TicketInventoryBase):
-    pass
+    organization_id: Optional[str] = None
 
 class TicketInventoryUpdate(BaseModel):
     group_name: Optional[str] = None
