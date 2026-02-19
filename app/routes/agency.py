@@ -53,11 +53,21 @@ async def create_agency(
             detail="Agency with this email already exists"
         )
     
+    # Validate password when portal access is enabled
+    if agency.portal_access_enabled and not agency.password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password is required when portal access is enabled"
+        )
+    
     agency_dict = agency.model_dump()
     
-    # Hash password
+    # Hash password if provided
     if "password" in agency_dict and agency_dict["password"]:
         agency_dict["password"] = hash_password(agency_dict["password"])
+    else:
+        # Remove password field if not provided
+        agency_dict.pop("password", None)
         
     created_agency = await db_ops.create(Collections.AGENCIES, agency_dict)
     

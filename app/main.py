@@ -28,7 +28,8 @@ from app.routes import (
     hotel_floor,
     hotel_room,
     hotel_room_booking,
-    # Shared Inventory
+    blog,
+    form,
     org_links,
     inventory_shares
 )
@@ -111,9 +112,8 @@ app.include_router(package.router, prefix="/api")
 app.include_router(discount.router, prefix="/api")
 app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
-# Shared Inventory
-app.include_router(org_links.router, prefix="/api")
-app.include_router(inventory_shares.router, prefix="/api")
+app.include_router(blog.router, prefix="/api")
+app.include_router(form.router, prefix="/api")
 
 @app.get("/")
 async def root():

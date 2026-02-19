@@ -84,6 +84,9 @@ class Collections:
     COMMISSIONS = "commissions"
     SERVICE_CHARGES = "service_charges"
     
+    # Content Management Collections
+    BLOGS = "blogs"
+    FORMS = "forms"
     # Hotel PMS Collections
     HOTEL_CATEGORIES = "hotel_categories"
     BED_TYPES = "bed_types"
