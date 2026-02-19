@@ -113,3 +113,45 @@ async def delete_organization(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found"
         )
+
+# --- Dependencies ---
+
+async def get_current_organization(current_user: dict = Depends(get_current_user)) -> dict:
+    """
+    Get the organization context for the current user.
+    Supports:
+    1. Direct Organization Login (user_type="organization")
+    2. Admin Login (with organization_id)
+    3. Organization Employee (entity_type="organization")
+    """
+    org_id = None
+    
+    # 1. Check for organization_id in token (Admin or Organization login)
+    if current_user.get("organization_id"):
+        org_id = current_user["organization_id"]
+        
+    # 2. Check for Direct Organization Login (sub is org_id)
+    elif current_user.get("user_type") == "organization":
+        org_id = current_user.get("sub")
+        
+    # 3. Check for Organization Employee
+    elif current_user.get("entity_type") == "organization":
+        org_id = current_user.get("entity_id")
+        
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Organization context required"
+        )
+        
+    # Fetch organization
+    # Note: We use the helper directly or db_ops
+    org = await db_ops.get_by_id(Collections.ORGANIZATIONS, org_id)
+    
+    if not org:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Organization not found"
+        )
+        
+    return org

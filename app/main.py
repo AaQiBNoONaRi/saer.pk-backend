@@ -32,6 +32,7 @@ from app.routes import (
     form,
     org_links,
     inventory_shares
+    bank_account
 )
 
 @asynccontextmanager
@@ -114,6 +115,7 @@ app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
+app.include_router(bank_account.router, prefix="/api")
 
 @app.get("/")
 async def root():

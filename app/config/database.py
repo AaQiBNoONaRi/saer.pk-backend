@@ -63,6 +63,7 @@ class Collections:
     LEDGER = "ledger"
     OPERATIONS = "operations"
     PAYMENTS = "payments"
+    BANK_ACCOUNTS = "bank_accounts"
     ADMINS = "admins"
     
     # Others Management Collections
