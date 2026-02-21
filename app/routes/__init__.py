@@ -17,3 +17,6 @@ from . import service_charge
 from . import org_links
 from . import inventory_shares
 from . import flight_search
+from . import blog
+from . import form
+from . import bank_account

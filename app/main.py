@@ -33,7 +33,9 @@ from app.routes import (
     inventory_shares,
     # Flight Search (AIQS)
     flight_search,
-    bank_account
+    bank_account,
+    blog,
+    form
 )
 
 @asynccontextmanager
