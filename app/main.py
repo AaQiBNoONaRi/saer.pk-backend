@@ -30,7 +30,9 @@ from app.routes import (
     hotel_room,
     hotel_room_booking,
     blog,
-    form
+    form,
+    org_links,
+    inventory_shares
 )
 
 from app.routes import organization, branch, agency, employee, hotel, flight, transport, admin, others, package, branch_auth, agency_auth, discount, commission, service_charge, ticket_booking, umrah_booking, custom_booking
@@ -137,6 +139,7 @@ app.include_router(service_charge.router, prefix="/api")
 
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
+app.include_router(bank_account.router, prefix="/api")
 
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")

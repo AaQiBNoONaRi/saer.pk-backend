@@ -14,6 +14,8 @@ class EmployeeBase(BaseModel):
     phone: str = Field(..., min_length=10, max_length=20)
     role: str = Field(..., description="admin, manager, agent, etc.")
     is_active: bool = True
+    portal_access_enabled: bool = True
+    username: Optional[str] = None
 
 class EmployeeCreate(EmployeeBase):
     password: str = Field(..., min_length=6)
@@ -24,6 +26,8 @@ class EmployeeUpdate(BaseModel):
     phone: Optional[str] = Field(None, min_length=10, max_length=20)
     role: Optional[str] = None
     is_active: Optional[bool] = None
+    portal_access_enabled: Optional[bool] = None
+    username: Optional[str] = None
     password: Optional[str] = Field(None, min_length=6)
 
 class EmployeeResponse(EmployeeBase):
