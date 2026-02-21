@@ -1,16 +1,60 @@
 """
 Ticket Booking routes - Dedicated API for flight ticket bookings
 """
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List, Optional
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
+from typing import List, Optional, Any, Dict
 from datetime import datetime
 import random
 import string
-from app.models.booking import BookingCreate, BookingUpdate, BookingResponse
+import shutil
+import os
+from pydantic import BaseModel, Field
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+
+# ── Inline Pydantic models (booking.py was removed) ──────────────────────────
+
+class TicketPassengerData(BaseModel):
+    type: str = "Adult"
+    name: Optional[str] = None
+    title: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    passport_no: Optional[str] = None
+    passport_issue: Optional[str] = None
+    passport_expiry: Optional[str] = None
+    dob: Optional[str] = None
+    country: Optional[str] = None
+    gender: Optional[str] = None
+    nationality: Optional[str] = None
+    passport_path: Optional[str] = None
+
+class BookingCreate(BaseModel):
+    ticket_id: str
+    passengers: Optional[List[TicketPassengerData]] = []
+    total_passengers: int = Field(default=1, ge=1)
+    total_amount: Optional[float] = 0
+    payment_method: Optional[str] = "bank"
+    payment_status: Optional[str] = "unpaid"
+    payment_details: Optional[Dict[str, Any]] = {}
+    booking_status: Optional[str] = "under_process"
+    notes: Optional[str] = None
+    agency_details: Optional[Dict[str, Any]] = None
+    branch_details: Optional[Dict[str, Any]] = None
+    organization_details: Optional[Dict[str, Any]] = None
+
+class BookingUpdate(BaseModel):
+    booking_status: Optional[str] = None
+    payment_method: Optional[str] = None
+    payment_status: Optional[str] = None
+    paid_amount: Optional[float] = None
+    payment_details: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
+
+class BookingResponse(BaseModel):
+    model_config = {"arbitrary_types_allowed": True, "extra": "allow"}
 
 router = APIRouter(prefix="/ticket-bookings", tags=["Ticket Bookings"])
 
@@ -47,14 +91,42 @@ async def create_ticket_booking(
     booking_dict['booking_type'] = 'ticket'  # Force ticket type
     booking_dict['booking_reference'] = generate_booking_reference()
     booking_dict['created_by'] = current_user.get('email') or current_user.get('username')
-    
-    # Add agency/branch info from current user
-    if current_user.get('role') == 'agency':
-        booking_dict['agency_id'] = str(current_user.get('_id'))
-        booking_dict['agent_name'] = current_user.get('agency_name', 'Unknown')
-    elif current_user.get('role') == 'branch':
-        booking_dict['branch_id'] = str(current_user.get('_id'))
-        booking_dict['agent_name'] = current_user.get('branch_name', 'Unknown')
+    booking_dict['created_at'] = datetime.utcnow().isoformat()
+
+    # ── resolve IDs from JWT (sub = entity _id; '_id' key is NOT in JWT payload) ──
+    role      = current_user.get('role')
+    agency_id = current_user.get('agency_id') or (current_user.get('sub') if role == 'agency' else None)
+    branch_id = current_user.get('branch_id') or (current_user.get('sub') if role == 'branch' else None)
+    org_id    = current_user.get('organization_id')
+
+    booking_dict['agency_id']       = agency_id
+    booking_dict['branch_id']       = branch_id
+    booking_dict['organization_id'] = org_id
+    booking_dict['agent_name']      = (
+        current_user.get('agency_name') or
+        current_user.get('branch_name') or
+        current_user.get('email', 'Unknown')
+    )
+
+    # ── fetch & embed full hierarchy documents (strip passwords) ──
+    if agency_id:
+        agency_doc = await db_ops.get_by_id(Collections.AGENCIES, agency_id)
+        if agency_doc:
+            ad = serialize_doc(agency_doc)
+            ad.pop('password', None); ad.pop('hashed_password', None)
+            booking_dict['agency_details'] = ad
+
+    if branch_id:
+        branch_doc = await db_ops.get_by_id(Collections.BRANCHES, branch_id)
+        if branch_doc:
+            bd = serialize_doc(branch_doc)
+            bd.pop('password', None); bd.pop('hashed_password', None)
+            booking_dict['branch_details'] = bd
+
+    if org_id:
+        org_doc = await db_ops.get_by_id(Collections.ORGANIZATIONS, org_id)
+        if org_doc:
+            booking_dict['organization_details'] = serialize_doc(org_doc)
     
     # Create booking in TICKET_BOOKINGS collection
     created_booking = await db_ops.create(Collections.TICKET_BOOKINGS, booking_dict)
@@ -83,9 +155,11 @@ async def get_ticket_bookings(
     
     # Filter by agency/branch
     if current_user.get('role') == 'agency':
-        filter_query['agency_id'] = str(current_user.get('_id'))
+        aid = current_user.get('agency_id') or current_user.get('sub')
+        filter_query['agency_id'] = aid
     elif current_user.get('role') == 'branch':
-        filter_query['branch_id'] = str(current_user.get('_id'))
+        bid = current_user.get('branch_id') or current_user.get('sub')
+        filter_query['branch_id'] = bid
     
     if booking_status:
         filter_query['booking_status'] = booking_status
@@ -108,10 +182,14 @@ async def get_ticket_booking(
         raise HTTPException(status_code=404, detail="Ticket booking not found")
     
     # Check authorization
-    if current_user.get('role') == 'agency' and booking.get('agency_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to view this booking")
-    elif current_user.get('role') == 'branch' and booking.get('branch_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to view this booking")
+    if current_user.get('role') == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('sub')
+        if booking.get('agency_id') != aid:
+            raise HTTPException(status_code=403, detail="Not authorized to view this booking")
+    elif current_user.get('role') == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('sub')
+        if booking.get('branch_id') != bid:
+            raise HTTPException(status_code=403, detail="Not authorized to view this booking")
     
     return serialize_doc(booking)
 

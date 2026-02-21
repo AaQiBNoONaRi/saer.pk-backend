@@ -2,7 +2,7 @@
 Package model and schemas
 """
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 
 class PackageFlightData(BaseModel):
@@ -11,6 +11,8 @@ class PackageFlightData(BaseModel):
     trip_type: str
     departure_city: str
     arrival_city: str
+    flight_number: Optional[str] = None
+    time: Optional[str] = None
     adult_selling: float
     child_selling: float
     infant_selling: float
@@ -41,10 +43,11 @@ class PackageTransportData(BaseModel):
     selling: float
 
 class PackageBase(BaseModel):
+    organization_id: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=200)
     pax_capacity: Optional[str] = None
     description: Optional[str] = None
-    flight: Optional[PackageFlightData] = None
+    flight: Optional[Union[str, PackageFlightData]] = None
     hotels: List[PackageHotelData] = Field(default=[])
     food: Optional[PackageServiceData] = None
     ziyarat: Optional[PackageServiceData] = None
@@ -60,7 +63,7 @@ class PackageUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     pax_capacity: Optional[str] = None
     description: Optional[str] = None
-    flight: Optional[PackageFlightData] = None
+    flight: Optional[Union[str, PackageFlightData]] = None
     hotels: Optional[List[PackageHotelData]] = None
     food: Optional[PackageServiceData] = None
     ziyarat: Optional[PackageServiceData] = None

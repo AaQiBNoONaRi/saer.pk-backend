@@ -14,10 +14,6 @@ from . import ticket_inventory
 from . import discount
 from . import commission
 from . import service_charge
-<<<<<<< Updated upstream
-
-=======
 from . import ticket_booking
 from . import umrah_booking
 from . import custom_booking
->>>>>>> Stashed changes

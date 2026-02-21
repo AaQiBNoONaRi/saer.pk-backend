@@ -72,7 +72,27 @@ app.add_middleware(
 
 # Request logging middleware
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 import time
+import json
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = None
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    # Round-trip through json with default=str to handle non-serializable objects (e.g. ValueError)
+    safe_errors = json.loads(json.dumps(exc.errors(), default=str))
+    print("\n" + "="*60)
+    print(f"❌ 422 VALIDATION ERROR on {request.method} {request.url.path}")
+    print(f"📋 ERRORS: {json.dumps(safe_errors, indent=2)}")
+    if body:
+        print(f"📦 BODY SENT: {json.dumps(body, indent=2, default=str)}")
+    print("="*60 + "\n")
+    return JSONResponse(status_code=422, content={"detail": safe_errors})
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):

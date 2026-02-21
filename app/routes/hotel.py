@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from typing import List, Optional
 from app.config.database import db_config, Collections
 from app.utils.auth import get_current_user
@@ -11,6 +11,7 @@ router = APIRouter(prefix="/hotels", tags=["Hotels"])
 
 @router.post("/", response_model=HotelResponse, status_code=status.HTTP_201_CREATED)
 async def create_hotel(
+    request: Request,
     hotel: HotelCreate,
     current_user: dict = Depends(get_current_user)
 ):

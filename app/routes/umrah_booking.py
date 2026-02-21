@@ -1,12 +1,12 @@
 """
 Umrah Package Booking routes - Dedicated API for Umrah package bookings
 """
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import List, Optional
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
+from typing import List, Optional, Dict, Any
 from datetime import datetime
-import random
-import string
-from app.models.booking import BookingCreate, BookingUpdate, BookingResponse
+import random, string, os, shutil, uuid
+from pydantic import BaseModel
+
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
@@ -14,62 +14,144 @@ from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/umrah-bookings", tags=["Umrah Bookings"])
 
+# ── Pydantic models (self-contained so booking.py is not required) ──────────
+
+class PassengerData(BaseModel):
+    type: str  # adult | child | infant
+    room_type: Optional[str] = None
+    room_index: Optional[int] = None
+    slot_in_room: Optional[int] = None
+    name: str
+    title: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    passport_no: str
+    passport_issue: Optional[str] = None    # YYYY-MM-DD
+    passport_expiry: Optional[str] = None   # YYYY-MM-DD
+    dob: Optional[str] = None               # YYYY-MM-DD
+    country: Optional[str] = None
+    gender: Optional[str] = None
+    nationality: Optional[str] = "Pakistani"
+    passport_path: Optional[str] = None     # server file path after upload
+    # ── family fields (auto-computed: first adult per room = family head) ──
+    family_id: Optional[str] = None         # e.g. 'double_1', 'sharing_2'
+    family_label: Optional[str] = None      # e.g. 'Double Room 1'
+    is_family_head: Optional[bool] = False
+    family_head_name: Optional[str] = None
+    family_head_passport: Optional[str] = None
+
+class RoomSelection(BaseModel):
+    room_type: str   # sharing|quint|quad|triple|double
+    quantity: int
+    price_per_person: float
+
+class UmrahBookingCreate(BaseModel):
+    package_id: str
+    package_details: Optional[Dict[str, Any]] = None   # full package object (includes flight, hotels, transport, prices)
+    rooms_selected: List[RoomSelection] = []
+    passengers: List[PassengerData] = []
+    total_passengers: int = 0
+    total_amount: float = 0
+    payment_method: Optional[str] = None
+    payment_status: Optional[str] = None
+    payment_details: Optional[Dict[str, Any]] = None
+    booking_status: str = "underprocess"
+    notes: Optional[str] = None
+    # Hierarchy snapshots (populated server-side, ignored if sent by client)
+    agency_details: Optional[Dict[str, Any]] = None
+    branch_details: Optional[Dict[str, Any]] = None
+    organization_details: Optional[Dict[str, Any]] = None
+
+class UmrahBookingUpdate(BaseModel):
+    booking_status: Optional[str] = None
+    payment_method: Optional[str] = None
+    payment_status: Optional[str] = None
+    payment_details: Optional[Dict[str, Any]] = None
+    notes: Optional[str] = None
+
+PASSPORT_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "passports")
+os.makedirs(PASSPORT_UPLOAD_DIR, exist_ok=True)
+
 def generate_booking_reference():
-    """Generate unique booking reference like UB-YYMMDD-XXXX"""
     timestamp = datetime.now().strftime('%y%m%d')
     random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
     return f"UB-{timestamp}-{random_str}"
 
-@router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
+# ── Passport upload ──────────────────────────────────────────────────────────
+
+@router.post("/upload-passport")
+async def upload_passport_image(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload a passenger passport image; returns the stored file path."""
+    allowed = {"image/jpeg", "image/png", "image/jpg", "image/webp"}
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Only JPEG/PNG images allowed")
+    ext = os.path.splitext(file.filename or "passport.jpg")[1] or ".jpg"
+    unique_name = f"passport_{datetime.now().strftime('%Y%m%d%H%M%S%f')}_{random.randint(1000,9999)}{ext}"
+    dest = os.path.join(PASSPORT_UPLOAD_DIR, unique_name)
+    with open(dest, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+    return {"path": f"/uploads/passports/{unique_name}", "filename": unique_name}
+
+# ── CRUD ─────────────────────────────────────────────────────────────────────
+
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_umrah_booking(
-    booking: BookingCreate,
+    booking: UmrahBookingCreate,
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new Umrah package booking"""
-    
-    # Verify package exists
-    package = await db_ops.get_by_id(Collections.PACKAGES, booking.ticket_id)
+    package = await db_ops.get_by_id(Collections.PACKAGES, booking.package_id)
     if not package:
         raise HTTPException(status_code=404, detail="Package not found")
-    
-    if not package.get('is_active', False):
-        raise HTTPException(status_code=400, detail="Package is not active")
-    
-    available_seats = package.get('available_seats', 0)
-    if available_seats < booking.total_passengers:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Not enough seats available. Only {available_seats} seats left."
-        )
-    
-    # Prepare booking data
+
     booking_dict = booking.model_dump()
-    booking_dict['booking_type'] = 'package'  # Force package type
+    booking_dict['booking_type'] = 'umrah_package'
     booking_dict['booking_reference'] = generate_booking_reference()
     booking_dict['created_by'] = current_user.get('email') or current_user.get('username')
-    
-    # Add agency/branch info from current user
-    if current_user.get('role') == 'agency':
-        booking_dict['agency_id'] = str(current_user.get('_id'))
-        booking_dict['agent_name'] = current_user.get('agency_name', 'Unknown')
-    elif current_user.get('role') == 'branch':
-        booking_dict['branch_id'] = str(current_user.get('_id'))
-        booking_dict['agent_name'] = current_user.get('branch_name', 'Unknown')
-    
-    # Create booking in UMRAH_BOOKINGS collection
-    created_booking = await db_ops.create(Collections.UMRAH_BOOKINGS, booking_dict)
-    
-    # Update package inventory - reduce available seats
-    new_available_seats = available_seats - booking.total_passengers
-    await db_ops.update(
-        Collections.PACKAGES, 
-        booking.ticket_id, 
-        {"available_seats": new_available_seats}
+    booking_dict['created_at'] = datetime.utcnow().isoformat()
+
+    # ── resolve IDs from JWT (sub = entity's _id; _id key is NOT in payload) ──
+    role = current_user.get('role')
+    agency_id = current_user.get('agency_id')  or (current_user.get('sub') if role == 'agency' else None)
+    branch_id = current_user.get('branch_id')  or (current_user.get('sub') if role == 'branch' else None)
+    org_id    = current_user.get('organization_id')
+
+    booking_dict['agency_id']       = agency_id
+    booking_dict['branch_id']       = branch_id
+    booking_dict['organization_id'] = org_id
+    booking_dict['agent_name']      = (
+        current_user.get('agency_name') or
+        current_user.get('branch_name') or
+        current_user.get('email', 'Unknown')
     )
-    
+
+    # ── fetch & embed full hierarchy documents (strip password fields) ──
+    if agency_id:
+        agency_doc = await db_ops.get_by_id(Collections.AGENCIES, agency_id)
+        if agency_doc:
+            ad = serialize_doc(agency_doc)
+            ad.pop('password', None); ad.pop('hashed_password', None)
+            booking_dict['agency_details'] = ad
+
+    if branch_id:
+        branch_doc = await db_ops.get_by_id(Collections.BRANCHES, branch_id)
+        if branch_doc:
+            bd = serialize_doc(branch_doc)
+            bd.pop('password', None); bd.pop('hashed_password', None)
+            booking_dict['branch_details'] = bd
+
+    if org_id:
+        org_doc = await db_ops.get_by_id(Collections.ORGANIZATIONS, org_id)
+        if org_doc:
+            booking_dict['organization_details'] = serialize_doc(org_doc)
+
+    created_booking = await db_ops.create(Collections.UMRAH_BOOKINGS, booking_dict)
     return serialize_doc(created_booking)
 
-@router.get("/", response_model=List[BookingResponse])
+@router.get("/")
 async def get_umrah_bookings(
     booking_status: Optional[str] = None,
     payment_status: Optional[str] = None,
@@ -78,97 +160,47 @@ async def get_umrah_bookings(
     limit: int = 50,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get all Umrah package bookings with optional filtering"""
     filter_query = {}
-    
-    # Filter by agency/branch
     if current_user.get('role') == 'agency':
-        filter_query['agency_id'] = str(current_user.get('_id'))
+        aid = current_user.get('agency_id') or current_user.get('sub')
+        filter_query['agency_id'] = aid
     elif current_user.get('role') == 'branch':
-        filter_query['branch_id'] = str(current_user.get('_id'))
-    
+        bid = current_user.get('branch_id') or current_user.get('sub')
+        filter_query['branch_id'] = bid
     if booking_status:
         filter_query['booking_status'] = booking_status
     if payment_status:
         filter_query['payment_status'] = payment_status
     if booking_reference:
         filter_query['booking_reference'] = {"$regex": booking_reference, "$options": "i"}
-    
     bookings = await db_ops.get_all(Collections.UMRAH_BOOKINGS, filter_query, skip=skip, limit=limit)
     return serialize_docs(bookings)
 
-@router.get("/{booking_id}", response_model=BookingResponse)
-async def get_umrah_booking(
-    booking_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Get Umrah package booking by ID"""
+@router.get("/{booking_id}")
+async def get_umrah_booking(booking_id: str, current_user: dict = Depends(get_current_user)):
     booking = await db_ops.get_by_id(Collections.UMRAH_BOOKINGS, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Umrah booking not found")
-    
-    # Check authorization
-    if current_user.get('role') == 'agency' and booking.get('agency_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to view this booking")
-    elif current_user.get('role') == 'branch' and booking.get('branch_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to view this booking")
-    
     return serialize_doc(booking)
 
-@router.put("/{booking_id}", response_model=BookingResponse)
+@router.put("/{booking_id}")
 async def update_umrah_booking(
     booking_id: str,
-    booking_update: BookingUpdate,
+    booking_update: UmrahBookingUpdate,
     current_user: dict = Depends(get_current_user)
 ):
-    """Update Umrah package booking details"""
     update_data = booking_update.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
-    
-    # Get existing booking
     booking = await db_ops.get_by_id(Collections.UMRAH_BOOKINGS, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Umrah booking not found")
-    
-    # Check authorization
-    if current_user.get('role') == 'agency' and booking.get('agency_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to update this booking")
-    elif current_user.get('role') == 'branch' and booking.get('branch_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to update this booking")
-    
     updated_booking = await db_ops.update(Collections.UMRAH_BOOKINGS, booking_id, update_data)
-    if not updated_booking:
-        raise HTTPException(status_code=404, detail="Umrah booking not found")
-    
     return serialize_doc(updated_booking)
 
 @router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def cancel_umrah_booking(
-    booking_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """Cancel Umrah package booking and restore package inventory"""
+async def cancel_umrah_booking(booking_id: str, current_user: dict = Depends(get_current_user)):
     booking = await db_ops.get_by_id(Collections.UMRAH_BOOKINGS, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Umrah booking not found")
-    
-    # Check authorization
-    if current_user.get('role') == 'agency' and booking.get('agency_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
-    elif current_user.get('role') == 'branch' and booking.get('branch_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
-    
-    # Update booking status to cancelled
     await db_ops.update(Collections.UMRAH_BOOKINGS, booking_id, {"booking_status": "cancelled"})
-    
-    # Restore package inventory
-    package = await db_ops.get_by_id(Collections.PACKAGES, booking.get('ticket_id'))
-    if package:
-        current_available = package.get('available_seats', 0)
-        restored_seats = current_available + booking.get('total_passengers', 0)
-        await db_ops.update(
-            Collections.PACKAGES,
-            booking.get('ticket_id'),
-            {"available_seats": restored_seats}
-        )
