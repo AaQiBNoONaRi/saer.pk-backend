@@ -6,34 +6,45 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.config.database import db_config
 from app.config.settings import settings
+
 from app.routes import (
     organization,
     branch,
     agency,
+    branch_auth,
+    agency_auth,
     employee,
-    hotel, # Old name, might need rename if I changed the file name
+    hotel,
     flight,
     transport,
     admin,
     others,
     package,
-    branch_auth,
-    agency_auth,
     discount,
     commission,
     service_charge,
+    ticket_booking,
+    umrah_booking,
+    custom_booking,
     # Hotel PMS Routers
     hotel_category,
     bed_type,
     hotel_floor,
     hotel_room,
     hotel_room_booking,
+    # Shared Inventory
+    org_links,
+    inventory_shares,
+    # Flight Search (AIQS)
+    flight_search,
+    bank_account,
     blog,
     form,
     org_links,
     inventory_shares,
     bank_account
 )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -58,11 +69,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://localhost:5174", 
-        "http://localhost:5175",  # Organization portal
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",
+        "http://localhost:5177",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
+        "http://127.0.0.1:5176",
+        "http://127.0.0.1:5177",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -71,7 +86,27 @@ app.add_middleware(
 
 # Request logging middleware
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 import time
+import json
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = None
+    try:
+        body = await request.json()
+    except Exception:
+        pass
+    # Round-trip through json with default=str to handle non-serializable objects (e.g. ValueError)
+    safe_errors = json.loads(json.dumps(exc.errors(), default=str))
+    print("\n" + "="*60)
+    print(f"❌ 422 VALIDATION ERROR on {request.method} {request.url.path}")
+    print(f"📋 ERRORS: {json.dumps(safe_errors, indent=2)}")
+    if body:
+        print(f"📦 BODY SENT: {json.dumps(body, indent=2, default=str)}")
+    print("="*60 + "\n")
+    return JSONResponse(status_code=422, content={"detail": safe_errors})
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -113,9 +148,21 @@ app.include_router(package.router, prefix="/api")
 app.include_router(discount.router, prefix="/api")
 app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
+# Shared Inventory
+app.include_router(org_links.router, prefix="/api")
+app.include_router(inventory_shares.router, prefix="/api")
+# Flight Search (AIQS)
+app.include_router(flight_search.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
+
+app.include_router(ticket_booking.router, prefix="/api")
+app.include_router(umrah_booking.router, prefix="/api")
+app.include_router(custom_booking.router, prefix="/api")
+
+
+
 
 @app.get("/")
 async def root():

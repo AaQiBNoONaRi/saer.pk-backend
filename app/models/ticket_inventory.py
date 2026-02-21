@@ -14,6 +14,8 @@ class StopoverDetails(BaseModel):
     arrival_datetime: datetime
     stopover_city: str
     arrival_city: str
+    departure_time: Optional[str] = None
+    arrival_time: Optional[str] = None
     wait_time: str
 
 class TripDetails(BaseModel):
@@ -28,6 +30,8 @@ class TripDetails(BaseModel):
     arrival_datetime: datetime
     departure_city: str
     arrival_city: str
+    departure_time: Optional[str] = None
+    arrival_time: Optional[str] = None
     
     # Stopover details (only if flight has stops)
     stopover: Optional[StopoverDetails] = None

@@ -59,7 +59,13 @@ class Collections:
     FOOD = "food"
     ZIYARAT = "ziyarat"
     PACKAGES = "packages"
-    BOOKINGS = "bookings"
+    
+    # Separate Booking Collections
+    TICKET_BOOKINGS = "ticket_bookings"
+    UMRAH_BOOKINGS = "umrah_bookings"
+    CUSTOM_BOOKINGS = "custom_bookings"
+    BOOKINGS = "bookings"  # Legacy - will be removed
+    
     LEDGER = "ledger"
     OPERATIONS = "operations"
     PAYMENTS = "payments"
