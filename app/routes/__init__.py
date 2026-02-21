@@ -16,3 +16,4 @@ from . import commission
 from . import service_charge
 from . import org_links
 from . import inventory_shares
+from . import flight_search
