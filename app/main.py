@@ -32,7 +32,8 @@ from app.routes import (
     org_links,
     inventory_shares,
     # Flight Search (AIQS)
-    flight_search
+    flight_search,
+    bank_account
 )
 
 @asynccontextmanager
@@ -122,6 +123,10 @@ app.include_router(org_links.router, prefix="/api")
 app.include_router(inventory_shares.router, prefix="/api")
 # Flight Search (AIQS)
 app.include_router(flight_search.router, prefix="/api")
+app.include_router(blog.router, prefix="/api")
+app.include_router(form.router, prefix="/api")
+app.include_router(bank_account.router, prefix="/api")
+
 
 @app.get("/")
 async def root():
