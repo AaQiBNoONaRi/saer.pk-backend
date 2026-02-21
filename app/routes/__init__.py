@@ -19,3 +19,7 @@ from . import inventory_shares
 from . import ticket_booking
 from . import umrah_booking
 from . import custom_booking
+from . import flight_search
+from . import blog
+from . import form
+from . import bank_account

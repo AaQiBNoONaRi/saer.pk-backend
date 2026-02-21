@@ -11,31 +11,36 @@ from app.routes import (
     organization,
     branch,
     agency,
+    branch_auth,
+    agency_auth,
     employee,
-    hotel, # Old name, might need rename if I changed the file name
+    hotel,
     flight,
     transport,
     admin,
     others,
     package,
-    branch_auth,
-    agency_auth,
     discount,
     commission,
     service_charge,
+    ticket_booking,
+    umrah_booking,
+    custom_booking,
     # Hotel PMS Routers
     hotel_category,
     bed_type,
     hotel_floor,
     hotel_room,
     hotel_room_booking,
+    # Shared Inventory
+    org_links,
+    inventory_shares,
+    # Flight Search (AIQS)
+    flight_search,
+    bank_account,
     blog,
     form,
-    org_links,
-    inventory_shares
 )
-
-from app.routes import organization, branch, agency, employee, hotel, flight, transport, admin, others, package, branch_auth, agency_auth, discount, commission, service_charge, ticket_booking, umrah_booking, custom_booking
 
 
 @asynccontextmanager
@@ -61,11 +66,15 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://localhost:5174", 
-        "http://localhost:5175",  # Organization portal
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",
+        "http://localhost:5177",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
+        "http://127.0.0.1:5176",
+        "http://127.0.0.1:5177",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -136,7 +145,11 @@ app.include_router(package.router, prefix="/api")
 app.include_router(discount.router, prefix="/api")
 app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
-
+# Shared Inventory
+app.include_router(org_links.router, prefix="/api")
+app.include_router(inventory_shares.router, prefix="/api")
+# Flight Search (AIQS)
+app.include_router(flight_search.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
@@ -144,6 +157,8 @@ app.include_router(bank_account.router, prefix="/api")
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
 app.include_router(custom_booking.router, prefix="/api")
+
+
 
 
 @app.get("/")

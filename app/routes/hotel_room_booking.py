@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from typing import List, Optional
 from datetime import date
+from bson import ObjectId
 from app.config.database import db_config, Collections
 from app.utils.auth import get_current_user
 from app.database.db_operations import db_ops
@@ -114,7 +115,7 @@ async def update_booking(
 
         # Double Booking check excluding current ID
         overlap = await db_ops.get_all(Collections.HOTEL_ROOM_BOOKINGS, {
-            "_id": {"$ne": booking_id}, # Exclude self!
+            "_id": {"$ne": ObjectId(booking_id)}, # Exclude self via ObjectId!
             "room_id": existing["room_id"],
             "status": {"$in": ["BOOKED", "CHECKED_IN"]},
             "$or": [
@@ -131,13 +132,13 @@ async def update_booking(
                 detail="Date change causes overlap with another booking."
             )
 
-    update_data = booking_update.model_dump(exclude_unset=True)
+    update_data = booking_update.model_dump(mode='json', exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
         
     updated = await db_ops.update(Collections.HOTEL_ROOM_BOOKINGS, booking_id, update_data)
-    
-    # If Status changed to CHECKED_OUT, maybe trigger Room -> CLEANING (Future)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Booking not found or could not be updated")
     
     return serialize_doc(updated)
 
