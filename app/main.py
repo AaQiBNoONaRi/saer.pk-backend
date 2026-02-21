@@ -31,7 +31,7 @@ from app.routes import (
     blog,
     form,
     org_links,
-    inventory_shares
+    inventory_shares,
     bank_account
 )
 
