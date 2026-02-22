@@ -210,10 +210,14 @@ async def update_ticket_booking(
         raise HTTPException(status_code=404, detail="Ticket booking not found")
     
     # Check authorization
-    if current_user.get('role') == 'agency' and booking.get('agency_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to update this booking")
-    elif current_user.get('role') == 'branch' and booking.get('branch_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to update this booking")
+    if current_user.get('role') == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('sub')
+        if booking.get('agency_id') != aid:
+            raise HTTPException(status_code=403, detail="Not authorized to update this booking")
+    elif current_user.get('role') == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('sub')
+        if booking.get('branch_id') != bid:
+            raise HTTPException(status_code=403, detail="Not authorized to update this booking")
     
     updated_booking = await db_ops.update(Collections.TICKET_BOOKINGS, booking_id, update_data)
     if not updated_booking:
@@ -232,10 +236,14 @@ async def cancel_ticket_booking(
         raise HTTPException(status_code=404, detail="Ticket booking not found")
     
     # Check authorization
-    if current_user.get('role') == 'agency' and booking.get('agency_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
-    elif current_user.get('role') == 'branch' and booking.get('branch_id') != str(current_user.get('_id')):
-        raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
+    if current_user.get('role') == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('sub')
+        if booking.get('agency_id') != aid:
+            raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
+    elif current_user.get('role') == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('sub')
+        if booking.get('branch_id') != bid:
+            raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
     
     # Update booking status to cancelled
     await db_ops.update(Collections.TICKET_BOOKINGS, booking_id, {"booking_status": "cancelled"})

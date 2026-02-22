@@ -1,11 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, File, UploadFile
 from typing import List, Optional
 from app.config.database import db_config, Collections
 from app.utils.auth import get_current_user
 from app.database.db_operations import db_ops
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.models.hotel import HotelCreate, HotelUpdate, HotelResponse
+from app.config.settings import settings
 from datetime import date
+import os
+import shutil
+import uuid
 
 router = APIRouter(prefix="/hotels", tags=["Hotels"])
 
@@ -17,7 +21,12 @@ async def create_hotel(
 ):
     """Create new hotel with validation rules"""
     hotel_dict = hotel.model_dump(mode='json')
-    
+
+    # Stamp the creating org's ID onto the hotel
+    org_id = current_user.get("organization_id")
+    if org_id:
+        hotel_dict["organization_id"] = org_id
+
     # Ensure dates are strings for MongoDB (Motor can't encode datetime.date)
     for key, value in hotel_dict.items():
         if isinstance(value, date):
@@ -28,7 +37,7 @@ async def create_hotel(
                     price["date_from"] = price["date_from"].isoformat()
                 if isinstance(price.get("date_to"), date):
                     price["date_to"] = price["date_to"].isoformat()
-    
+
     created = await db_ops.create(Collections.HOTELS, hotel_dict)
     return serialize_doc(created)
 
@@ -40,26 +49,30 @@ async def get_hotels(
     available_until: date = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get all hotels with optional filtering"""
+    """Get all hotels with optional filtering — scoped to the caller's org"""
     filter_query = {}
-    
+
+    # Org-scoping: only show hotels belonging to the current user's organization
+    org_id = current_user.get("organization_id")
+    if org_id:
+        filter_query["organization_id"] = org_id
+
     if city:
         # Case insensitive search
         filter_query["city"] = {"$regex": city, "$options": "i"}
-        
+
     if category_id:
         filter_query["category_id"] = category_id
-        
-    # Date availability check logic could be complex. 
+
+    # Date availability check logic could be complex.
     # For now, simplistic check: hotel availability covers requested range
     if available_from and available_until:
         filter_query["available_from"] = {"$lte": available_from.isoformat()}
         filter_query["available_until"] = {"$gte": available_until.isoformat()}
-        
+
     hotels = await db_ops.get_all(Collections.HOTELS, filter_query)
-    
-    # Enrichment (Optional: Populate category name)
-    # This loop could be optimized with aggregation pipeline in future
+
+    # Enrichment: Populate category name
     results = []
     for hotel in hotels:
         if hotel.get("category_id"):
@@ -67,7 +80,7 @@ async def get_hotels(
              if category:
                  hotel["category_name"] = category.get("name")
         results.append(hotel)
-        
+
     return serialize_docs(results)
 
 @router.get("/{hotel_id}", response_model=HotelResponse)
@@ -141,3 +154,37 @@ async def delete_hotel(
     deleted = await db_ops.delete(Collections.HOTELS, hotel_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Hotel not found")
+
+@router.post("/upload-images")
+async def upload_images(
+    hotel_name: str = Query(...),
+    files: List[UploadFile] = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload multiple images for a hotel and store them in a structured folder"""
+    try:
+        # Create a safe folder name from hotel name
+        safe_name = "".join([c if c.isalnum() else "_" for c in hotel_name])
+        hotel_dir = os.path.join(settings.UPLOAD_DIR, "hotels", safe_name)
+        
+        if not os.path.exists(hotel_dir):
+            os.makedirs(hotel_dir)
+            
+        uploaded_urls = []
+        for file in files:
+            # Generate unique filename to prevent overwrites
+            ext = os.path.splitext(file.filename)[1]
+            filename = f"{uuid.uuid4()}{ext}"
+            file_path = os.path.join(hotel_dir, filename)
+            
+            with open(file_path, "wb") as buffer:
+                shutil.copyfileobj(file.file, buffer)
+            
+            # Construct accessible URL
+            url = f"http://localhost:8000/uploads/hotels/{safe_name}/{filename}"
+            uploaded_urls.append(url)
+            
+        return {"urls": uploaded_urls}
+    except Exception as e:
+        print(f"Error uploading images: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

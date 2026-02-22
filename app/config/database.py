@@ -104,3 +104,18 @@ class Collections:
     # Shared Inventory Collections
     ORG_LINKS = "org_links"
     INVENTORY_SHARES = "inventory_shares"
+
+    # Payment Collections (Kuickapay)
+    VOUCHERS = "vouchers"
+    TRANSACTIONS = "transactions"
+    WALLETS = "wallets"
+
+    # CRM Collections
+    LEADS = "leads"
+    PASSPORT_LEADS = "passport_leads"
+    CUSTOMERS = "customers"  # already set above, but alias here for clarity
+
+    # Finance & Accounting Collections
+    CHART_OF_ACCOUNTS = "chart_of_accounts"
+    JOURNAL_ENTRIES = "journal_entries"
+    AUDIT_TRAIL = "audit_trail"

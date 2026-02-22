@@ -92,14 +92,7 @@ class FlightResponse(FlightBase):
     is_shared: Optional[bool] = False
     shared_from_org_id: Optional[str] = None
 
-    class Config:
-        populate_by_name = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
     model_config = {
         "populate_by_name": True,
+        "from_attributes": True
     }

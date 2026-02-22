@@ -40,7 +40,14 @@ from app.routes import (
     bank_account,
     blog,
     form,
+    # Payment System (Kuickapay)
+    payment,
+    # CRM
+    leads,
+    passport_leads,
+    customers,
 )
+from app.finance import routes as finance_routes
 
 
 @asynccontextmanager
@@ -157,6 +164,17 @@ app.include_router(bank_account.router, prefix="/api")
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
 app.include_router(custom_booking.router, prefix="/api")
+
+# Payment System (Kuickapay)
+app.include_router(payment.router)
+
+# CRM
+app.include_router(leads.router, prefix="/api")
+app.include_router(passport_leads.router, prefix="/api")
+app.include_router(customers.router, prefix="/api")
+
+# Finance & Accounting Module
+app.include_router(finance_routes.router, prefix="/api")
 
 
 

@@ -49,7 +49,6 @@ class HotelBase(BaseModel):
 
     # Media
     photos: List[str] = []
-    video: Optional[str] = None
 
     # Settings
     allow_reselling: bool = False
@@ -81,12 +80,12 @@ class HotelUpdate(BaseModel):
     available_until: Optional[date] = None
     prices: Optional[List[HotelPrice]] = None
     photos: Optional[List[str]] = None
-    video: Optional[str] = None
     allow_reselling: Optional[bool] = None
     is_active: Optional[bool] = None
 
 class HotelResponse(HotelBase):
     id: str = Field(alias="_id")
+    organization_id: Optional[str] = None
     category_name: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
