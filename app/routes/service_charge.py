@@ -17,13 +17,6 @@ async def create_service_charge(
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new service charge"""
-    # Validate: Packages and Hotels can only have fixed charges
-    if service_charge.applies_to in ["packages", "hotels"] and service_charge.charge_type != "fixed":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Packages and Hotels can only have fixed service charges"
-        )
-    
     service_charge_dict = service_charge.model_dump(mode='json')
     created_service_charge = await db_ops.create(Collections.SERVICE_CHARGES, service_charge_dict)
     return serialize_doc(created_service_charge)

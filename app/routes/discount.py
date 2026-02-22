@@ -18,6 +18,11 @@ async def create_discount(
 ):
     """Create a new discount"""
     discount_dict = discount.model_dump(mode='json')
+    print(f"DEBUG: Creating discount with data: {discount_dict}")
+    print(f"  - ticket_discount: {discount_dict.get('ticket_discount')}")
+    print(f"  - ticket_discount_type: {discount_dict.get('ticket_discount_type')}")
+    print(f"  - package_discount: {discount_dict.get('package_discount')}")
+    print(f"  - package_discount_type: {discount_dict.get('package_discount_type')}")
     created_discount = await db_ops.create(Collections.DISCOUNTS, discount_dict)
     return serialize_doc(created_discount)
 

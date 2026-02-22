@@ -57,18 +57,12 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return payload
     
     # Check for employee token (has 'emp_id' field)
-    if payload.get("emp_id"):
-        return payload
-    
-    # Check for agency token (has 'agency_id' field)
-    if payload.get("agency_id"):
-        return payload
-    
-    # If none of the expected fields are present, reject the token
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid authentication credentials"
-    )
+    emp_id = payload.get("emp_id")
+    if emp_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials"
+        )
     
     return payload
 
@@ -125,20 +119,7 @@ async def require_org_admin(current_user: Dict = Depends(get_current_user)) -> D
 
 async def require_branch_admin(current_user: Dict = Depends(get_current_user)) -> Dict:
     """Dependency to require branch admin or higher access"""
-    # Check if this is an admin token (has 'sub' field instead of 'emp_id')
-    if current_user.get("sub"):
-        # Admins have full access
-        return current_user
-    
-    # For employee tokens, check employee type
-    emp_id = current_user.get("emp_id", "")
-    if not emp_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid authentication token"
-        )
-    
-    emp_type = get_employee_type(emp_id)
+    emp_type = get_employee_type(current_user.get("emp_id", ""))
     if emp_type not in ["organization", "branch"]:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

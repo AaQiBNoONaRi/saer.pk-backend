@@ -461,15 +461,13 @@ async def create_transport_price(
 @router.get("/transport-prices", response_model=List[TransportPriceResponse])
 async def get_transport_prices(
     status_filter: str = None,
-    skip: int = 0,
-    limit: int = 1000,
     current_user: dict = Depends(get_current_user)
 ):
     """Get all transport prices"""
     filter_query = {}
     if status_filter:
         filter_query["status"] = status_filter
-    prices = await db_ops.get_all(Collections.TRANSPORT_PRICES, filter_query, skip=skip, limit=limit)
+    prices = await db_ops.get_all(Collections.TRANSPORT_PRICES, filter_query)
     return serialize_docs(prices)
 
 @router.get("/transport-prices/{price_id}", response_model=TransportPriceResponse)

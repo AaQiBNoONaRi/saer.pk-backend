@@ -36,13 +36,4 @@ class Settings:
     # File Uploads
     UPLOAD_DIR = os.path.join(os.getcwd(), "uploads")
 
-    # ─── AIQS Flight API ─────────────────────────────────────────────────
-    AIQS_AUTH_URL = os.getenv("AIQS_AUTH_URL", "https://pp-auth-api.aiqs.link/auth/cognito")
-    AIQS_WSS_URL = os.getenv("AIQS_WSS_URL", "wss://pp-api.aiqs.link")
-    AIQS_REST_URL = os.getenv("AIQS_REST_URL", "https://pp-api.aiqs.link")
-    AIQS_CLIENT_ID = os.getenv("AIQS_CLIENT_ID", "6tvsrg4go69ktu9f4369tvmvi8")
-    AIQS_USERNAME = os.getenv("AIQS_USERNAME", "preprod@gmail.com")
-    AIQS_PASSWORD = os.getenv("AIQS_PASSWORD", "Preprod#1@2025")
-    AIQS_TOKEN_TTL = int(os.getenv("AIQS_TOKEN_TTL", "3000"))  # seconds
-
 settings = Settings()

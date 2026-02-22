@@ -13,8 +13,6 @@ class StopoverDetails(BaseModel):
     arrival_datetime: datetime
     stopover_city: str
     arrival_city: str
-    departure_time: Optional[str] = None
-    arrival_time: Optional[str] = None
     wait_time: str
 
 class TripDetails(BaseModel):
@@ -29,15 +27,12 @@ class TripDetails(BaseModel):
     arrival_datetime: datetime
     departure_city: str
     arrival_city: str
-    departure_time: Optional[str] = None
-    arrival_time: Optional[str] = None
     
     # Stopover details (only if flight has stops)
     stopover: Optional[StopoverDetails] = None
 
 class FlightBase(BaseModel):
     # Trip configuration
-    organization_id: Optional[str] = None  # Optional — set server-side from JWT token
     trip_type: Literal["One-way", "Round-trip"] = "One-way"
     
     # Departure trip details
@@ -63,12 +58,9 @@ class FlightBase(BaseModel):
     
     # Status
     is_active: bool = True
-    
-    # PNR Reference
-    pnr: Optional[str] = None
 
 class FlightCreate(FlightBase):
-    pass  # organization_id inherited as Optional, set server-side
+    pass
 
 class FlightUpdate(BaseModel):
     trip_type: Optional[Literal["One-way", "Round-trip"]] = None
@@ -89,17 +81,9 @@ class FlightResponse(FlightBase):
     id: str = Field(alias="_id")
     created_at: datetime
     updated_at: datetime
-    is_shared: Optional[bool] = False
-    shared_from_org_id: Optional[str] = None
-
+    
     class Config:
         populate_by_name = True
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-
-    model_config = {
-        "populate_by_name": True,
-    }

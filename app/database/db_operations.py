@@ -25,8 +25,7 @@ class DBOperations:
         try:
             document = await collection.find_one({"_id": ObjectId(doc_id)})
             return document
-        except Exception as e:
-            print(f"Error in get_by_id for {collection_name} with ID {doc_id}: {str(e)}")
+        except Exception:
             return None
     
     @staticmethod
@@ -58,8 +57,7 @@ class DBOperations:
                 return_document=True
             )
             return result
-        except Exception as e:
-            print(f"Error in update for {collection_name} with ID {doc_id}: {str(e)}")
+        except Exception:
             return None
     
     @staticmethod

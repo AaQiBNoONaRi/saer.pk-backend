@@ -59,17 +59,10 @@ class Collections:
     FOOD = "food"
     ZIYARAT = "ziyarat"
     PACKAGES = "packages"
-    
-    # Separate Booking Collections
-    TICKET_BOOKINGS = "ticket_bookings"
-    UMRAH_BOOKINGS = "umrah_bookings"
-    CUSTOM_BOOKINGS = "custom_bookings"
-    BOOKINGS = "bookings"  # Legacy - will be removed
-    
+    BOOKINGS = "bookings"
     LEDGER = "ledger"
     OPERATIONS = "operations"
     PAYMENTS = "payments"
-    BANK_ACCOUNTS = "bank_accounts"
     ADMINS = "admins"
     
     # Others Management Collections
@@ -85,22 +78,6 @@ class Collections:
     FLIGHT_IATA = "flight_iata"
     CITY_IATA = "city_iata"
     BOOKING_EXPIRY = "booking_expiry"
-    
-    # Financial Collections
-    DISCOUNTS = "discounts"
-    COMMISSIONS = "commissions"
     SERVICE_CHARGES = "service_charges"
-    
-    # Content Management Collections
-    BLOGS = "blogs"
-    FORMS = "forms"
-    # Hotel PMS Collections
-    HOTEL_CATEGORIES = "hotel_categories"
-    BED_TYPES = "bed_types"
-    HOTEL_FLOORS = "hotel_floors"
-    HOTEL_ROOMS = "hotel_rooms"
-    HOTEL_ROOM_BOOKINGS = "hotel_room_bookings"
-
-    # Shared Inventory Collections
-    ORG_LINKS = "org_links"
-    INVENTORY_SHARES = "inventory_shares"
+    COMMISSIONS = "commissions"
+    DISCOUNTS = "discounts"
