@@ -133,15 +133,18 @@ async def get_bank_accounts(
         
     elif current_user.get("role") == "agency":
         # Agency View
-         # Logic: (account_type='Agency' AND agency_id=Me) OR (account_type='Organization' AND organization_id=MyOrg)
-        agency_id = current_user["agency_id"]
-        org_id = current_user["organization_id"]
+        agency_id = current_user.get("agency_id") or current_user.get("sub")
+        org_id = current_user.get("organization_id")
         
         or_conditions = [
             {"account_type": "Agency", "agency_id": agency_id},
         ]
-        if include_system:
-             or_conditions.append({"account_type": "Organization", "organization_id": org_id})
+        # Only add org condition if org_id is present
+        if include_system and org_id:
+            or_conditions.append({"account_type": "Organization", "organization_id": str(org_id)})
+        # If no org_id, fall back: show all Organization accounts (so agent still sees where to pay)
+        elif include_system and not org_id:
+            or_conditions.append({"account_type": "Organization"})
              
         query["$or"] = or_conditions
 

@@ -29,7 +29,8 @@ from app.routes import (
     hotel_room,
     hotel_room_booking,
     blog,
-    form
+    form,
+    payment,
 )
 
 @asynccontextmanager
@@ -112,6 +113,15 @@ app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
+app.include_router(bank_account.router, prefix="/api")
+app.include_router(payment.router, prefix="/api")
+
+app.include_router(ticket_booking.router, prefix="/api")
+app.include_router(umrah_booking.router, prefix="/api")
+app.include_router(custom_booking.router, prefix="/api")
+
+
+
 
 @app.get("/")
 async def root():

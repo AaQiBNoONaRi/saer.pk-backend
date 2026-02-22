@@ -23,3 +23,4 @@ from . import flight_search
 from . import blog
 from . import form
 from . import bank_account
+from . import payment
