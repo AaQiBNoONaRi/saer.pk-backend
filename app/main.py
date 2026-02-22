@@ -40,6 +40,7 @@ from app.routes import (
     bank_account,
     blog,
     form,
+    payment,
 )
 
 
@@ -153,6 +154,7 @@ app.include_router(flight_search.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
+app.include_router(payment.router, prefix="/api")
 
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
