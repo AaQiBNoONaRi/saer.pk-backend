@@ -24,3 +24,21 @@
 [2026-02-24 17:48:20.517410] Updating flights 69974bf1801c897e6e340e94 with {'available_seats': 7, 'updated_at': datetime.datetime(2026, 2, 24, 17, 48, 20, 516393)}
 
 [2026-02-24 17:48:43.114409] Updating ticket_bookings 699de46424a459e1a9176ffb with {'payment_method': 'bank', 'payment_status': 'pending', 'updated_at': datetime.datetime(2026, 2, 24, 17, 48, 43, 113895)}
+
+[2026-02-24 18:32:51.405577] Updating agencies 69907f1a1a2ed26ed3fc82ee with {'name': 'Abdul Moiz Ahmed', 'email': 'abdulmoiz76655@gmail.com', 'phone': '03222939981', 'address': 'House#G/722/724, Ghousia compound, Ghulshah road, Pinjra pol, Hyd, Sindh', 'city': 'Hyderabad', 'country': '', 'agency_type': 'full', 'credit_limit': 10.0, 'is_active': True, 'updated_at': datetime.datetime(2026, 2, 24, 18, 32, 51, 405280)}
+
+[2026-02-24 18:43:01.749721] Updating umrah_bookings 699df123876a0ed48e7dedd5 with {'payment_method': 'bank', 'payment_status': 'pending', 'updated_at': datetime.datetime(2026, 2, 24, 18, 43, 1, 749435)}
+
+[2026-02-24 19:58:03.923610] Updating payments 699cdc373b7c614ed670453d with {'status': 'approved', 'updated_at': datetime.datetime(2026, 2, 24, 19, 58, 3, 923306)}
+
+[2026-02-24 19:58:03.928199] Updating ticket_bookings 699cdc263b7c614ed670453c with {'payment_status': 'paid', 'paid_amount': 4000.0, 'booking_status': 'confirmed', 'updated_at': datetime.datetime(2026, 2, 24, 19, 58, 3, 927301)}
+
+[2026-02-24 19:58:06.311051] Updating payments 699df135876a0ed48e7dedd6 with {'status': 'approved', 'updated_at': datetime.datetime(2026, 2, 24, 19, 58, 6, 310719)}
+
+[2026-02-24 19:58:06.313704] Updating umrah_bookings 699df123876a0ed48e7dedd5 with {'payment_status': 'paid', 'paid_amount': 47295.0, 'booking_status': 'confirmed', 'updated_at': datetime.datetime(2026, 2, 24, 19, 58, 6, 313230)}
+
+[2026-02-24 19:58:42.881254] Updating umrah_bookings 699df123876a0ed48e7dedd5 with {'booking_status': 'approved', 'voucher_status': 'Approved', 'updated_at': datetime.datetime(2026, 2, 24, 19, 58, 42, 880891)}
+
+[2026-02-24 22:27:48.322768] Updating operations 699e2021fe819b73de8f1091 with {'status': 'checked_in', 'updated_at': datetime.datetime(2026, 2, 24, 22, 27, 48, 322417), 'checked_in_at': datetime.datetime(2026, 2, 24, 22, 27, 48, 322382)}
+
+[2026-02-24 22:30:10.734957] Updating operations 699e2021fe819b73de8f1091 with {'status': 'checked_out', 'updated_at': datetime.datetime(2026, 2, 24, 22, 30, 10, 734664), 'checked_out_at': datetime.datetime(2026, 2, 24, 22, 30, 10, 734626)}

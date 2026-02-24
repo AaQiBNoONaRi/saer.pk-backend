@@ -39,6 +39,10 @@ from app.routes import (
     ticket_booking,
     umrah_booking,
     custom_booking,
+    # Pax Movement
+    pax_movement,
+    # Daily Operations
+    operations,
 )
 
 @asynccontextmanager
@@ -66,20 +70,23 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware - Must be added before other middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:5174", 
-        "http://localhost:5175",  # Organization portal
+        "http://localhost:5175",
+        "http://localhost:5176",  # Agency portal
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
+        "http://127.0.0.1:5176",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Request logging middleware
@@ -134,6 +141,8 @@ app.include_router(payment.router, prefix="/api")
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
 app.include_router(custom_booking.router, prefix="/api")
+app.include_router(pax_movement.router, prefix="/api")
+app.include_router(operations.router, prefix="/api")
 
 
 
