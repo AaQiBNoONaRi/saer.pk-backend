@@ -42,7 +42,10 @@ async def login(credentials: EmployeeLogin):
         )
     
     token_data = {
+        "_id": str(employee["_id"]),
         "emp_id": employee["emp_id"],
+        "full_name": employee.get("full_name") or employee.get("name", ""),
+        "name": employee.get("name") or employee.get("full_name", ""),
         "entity_type": employee["entity_type"],
         "entity_id": employee["entity_id"],
         "role": employee["role"],
@@ -50,6 +53,7 @@ async def login(credentials: EmployeeLogin):
         "user_type": "employee"
     }
     access_token = create_access_token(token_data)
+
     
     employee_out = serialize_doc(employee)
     employee_out.pop("hashed_password", None)
@@ -98,8 +102,11 @@ async def login_with_email(credentials: EmployeeEmailLogin):
     # Build JWT payload with full employee context
     permissions = employee.get("permissions", ["crm"])
     token_data = {
+        "_id": str(employee["_id"]),
         "emp_id": employee.get("emp_id", ""),
         "email": employee["email"],
+        "full_name": employee.get("full_name") or employee.get("name", ""),
+        "name": employee.get("name") or employee.get("full_name", ""),
         "entity_type": employee["entity_type"],
         "entity_id": employee["entity_id"],
         "organization_id": employee.get("organization_id", ""),
@@ -110,6 +117,7 @@ async def login_with_email(credentials: EmployeeEmailLogin):
         "user_type": "employee"
     }
     access_token = create_access_token(token_data)
+
     
     employee_out = serialize_doc(employee)
     employee_out.pop("hashed_password", None)
@@ -199,17 +207,31 @@ async def create_employee(
             detail="An employee with this email already exists"
         )
     
-    # Validate permissions
-    valid_perms = {"crm", "employees"}
-    invalid = [p for p in employee.permissions if p not in valid_perms]
-    if invalid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid permissions: {invalid}. Valid options: {list(valid_perms)}"
-        )
+    # Validate permissions (unless group_id is provided)
+    employee_dict = employee.model_dump()
+    if not employee_dict.get('group_id'):
+        valid_perms = {"crm", "employees"}
+        invalid = [p for p in employee_dict.get('permissions', []) if p not in valid_perms]
+        if invalid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid permissions: {invalid}. Valid options: {list(valid_perms)}"
+            )
+
+    # If a group_id is provided, resolve permissions from the role group
+    if employee_dict.get('group_id'):
+        group = await db_ops.get_by_id('role_groups', employee_dict['group_id'])
+        if group and isinstance(group.get('permissions'), dict):
+            perms = []
+            for mod, actions in group.get('permissions', {}).items():
+                try:
+                    if any(actions.values()):
+                        perms.append(mod)
+                except Exception:
+                    continue
+            employee_dict['permissions'] = perms
     
     # Hash password
-    employee_dict = employee.model_dump()
     password = employee_dict.pop("password")
     employee_dict["hashed_password"] = hash_password(password)
     
@@ -253,8 +275,11 @@ async def get_employee(
     emp_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get employee by emp_id"""
-    employee = await db_ops.get_one(Collections.EMPLOYEES, {"emp_id": emp_id})
+    """Get employee by emp_id or MongoDB ObjectId"""
+    from bson import ObjectId
+    
+    query = {"_id": ObjectId(emp_id)} if len(emp_id) == 24 and all(c in '0123456789abcdefABCDEF' for c in emp_id) else {"emp_id": emp_id}
+    employee = await db_ops.get_one(Collections.EMPLOYEES, query)
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -270,7 +295,10 @@ async def update_employee(
     current_user: dict = Depends(get_current_user)
 ):
     """Update employee"""
-    employee = await db_ops.get_one(Collections.EMPLOYEES, {"emp_id": emp_id})
+    from bson import ObjectId
+    
+    query = {"_id": ObjectId(emp_id)} if len(emp_id) == 24 and all(c in '0123456789abcdefABCDEF' for c in emp_id) else {"emp_id": emp_id}
+    employee = await db_ops.get_one(Collections.EMPLOYEES, query)
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -284,8 +312,20 @@ async def update_employee(
         password = update_data.pop("password")
         update_data["hashed_password"] = hash_password(password)
     
-    # Validate permissions if provided
-    if "permissions" in update_data:
+    # If group_id provided in update, resolve permissions from the group
+    if "group_id" in update_data and update_data.get("group_id"):
+        group = await db_ops.get_by_id('role_groups', update_data.get('group_id'))
+        if group and isinstance(group.get('permissions'), dict):
+            perms = []
+            for mod, actions in group.get('permissions', {}).items():
+                try:
+                    if any(actions.values()):
+                        perms.append(mod)
+                except Exception:
+                    continue
+            update_data['permissions'] = perms
+    # Validate permissions if provided and no group mapping
+    if "permissions" in update_data and not update_data.get('group_id'):
         valid_perms = {"crm", "employees"}
         invalid = [p for p in update_data["permissions"] if p not in valid_perms]
         if invalid:
@@ -310,7 +350,10 @@ async def delete_employee(
     current_user: dict = Depends(require_org_admin)
 ):
     """Delete employee (Org Admin only)"""
-    employee = await db_ops.get_one(Collections.EMPLOYEES, {"emp_id": emp_id})
+    from bson import ObjectId
+    
+    query = {"_id": ObjectId(emp_id)} if len(emp_id) == 24 and all(c in '0123456789abcdefABCDEF' for c in emp_id) else {"emp_id": emp_id}
+    employee = await db_ops.get_one(Collections.EMPLOYEES, query)
     if not employee:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

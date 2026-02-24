@@ -63,6 +63,8 @@ async def admin_login(credentials: AdminLogin):
     token_data = {
         "sub": str(user["_id"]),
         "username": user.get("username") or user.get("email"),
+        "full_name": user.get("full_name") or user.get("name", ""),
+        "name": user.get("name") or user.get("full_name", ""),
         "role": user.get("role", "organization" if user_type == "organization" else "admin"),
         "organization_id": str(user["_id"]) if user_type == "organization" else user.get("organization_id"),
         "user_type": user_type

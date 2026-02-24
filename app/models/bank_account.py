@@ -35,9 +35,10 @@ class BankAccountResponse(BankAccountBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        populate_by_name = True
-        json_encoders = {
+    model_config = {
+        "populate_by_name": True,
+        "json_encoders": {
             datetime: lambda v: v.isoformat(),
             ObjectId: lambda v: str(v)
         }
+    }

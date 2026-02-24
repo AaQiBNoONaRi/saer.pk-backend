@@ -46,6 +46,8 @@ from app.routes import (
     leads,
     passport_leads,
     customers,
+    tasks,
+    role_groups,
 )
 from app.finance import routes as finance_routes
 
@@ -160,6 +162,7 @@ app.include_router(flight_search.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
+app.include_router(payment.router, prefix="/api")
 
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
@@ -172,6 +175,8 @@ app.include_router(payment.router)
 app.include_router(leads.router, prefix="/api")
 app.include_router(passport_leads.router, prefix="/api")
 app.include_router(customers.router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")
+app.include_router(role_groups.router, prefix="/api")
 
 # Finance & Accounting Module
 app.include_router(finance_routes.router, prefix="/api")

@@ -19,9 +19,10 @@ class EmployeeBase(BaseModel):
     portal_access_enabled: bool = True
     username: Optional[str] = None
     permissions: List[str] = Field(default=["crm"], description="List of permissions: crm, employees")
+    group_id: Optional[str] = None
 
 class EmployeeCreate(EmployeeBase):
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=4)
 
 class EmployeeUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
@@ -31,8 +32,9 @@ class EmployeeUpdate(BaseModel):
     is_active: Optional[bool] = None
     portal_access_enabled: Optional[bool] = None
     username: Optional[str] = None
-    password: Optional[str] = Field(None, min_length=6)
+    password: Optional[str] = Field(None, min_length=4)
     permissions: Optional[List[str]] = None
+    group_id: Optional[str] = None
 
 class EmployeeResponse(EmployeeBase):
     id: str = Field(alias="_id")

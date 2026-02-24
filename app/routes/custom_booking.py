@@ -159,10 +159,16 @@ async def get_custom_bookings(
     current_user: dict = Depends(get_current_user)
 ):
     filter_query = {}
-    if current_user.get('role') == 'agency':
-        filter_query['agency_id'] = current_user.get('agency_id') or current_user.get('sub')
-    elif current_user.get('role') == 'branch':
-        filter_query['branch_id'] = current_user.get('branch_id') or current_user.get('sub')
+    
+    role = current_user.get('role')
+    entity_type = current_user.get('entity_type')
+    
+    if role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
+        filter_query['agency_id'] = aid
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
+        filter_query['branch_id'] = bid
     if booking_status:
         filter_query['booking_status'] = booking_status
     if payment_status:

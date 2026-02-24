@@ -47,8 +47,7 @@ async def get_customers(
     is_active: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500),
-    current_user: dict = Depends(get_current_user)
+    limit: int = Query(100, ge=1, le=500)
 ):
     """Return manually added walk-in customers"""
     filters = {}
@@ -89,7 +88,7 @@ async def create_customer(
 
 
 @router.get("/{customer_id}", summary="Get single customer")
-async def get_customer(customer_id: str, current_user: dict = Depends(get_current_user)):
+async def get_customer(customer_id: str):
     customer = await db_ops.get_by_id(Collections.CUSTOMERS, customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -128,8 +127,7 @@ async def delete_customer(customer_id: str, current_user: dict = Depends(get_cur
 async def get_customer_database(
     organization_id: Optional[str] = Query(None),
     source: Optional[str] = Query(None),   # bookings | leads | walk-in | branches
-    search: Optional[str] = Query(None),
-    current_user: dict = Depends(get_current_user)
+    search: Optional[str] = Query(None)
 ):
     """
     Aggregate customers from all sources:
@@ -153,7 +151,7 @@ async def get_customer_database(
         for booking in ticket_bookings:
             booking_ref = booking.get("booking_reference", "")
             booking_date = booking.get("created_at", "")
-            for pax in (booking.get("passengers") or []):
+            for idx, pax in enumerate(booking.get("passengers") or []):
                 first = pax.get("first_name") or ""
                 last  = pax.get("last_name") or ""
                 name  = pax.get("name") or f"{first} {last}".strip()
@@ -168,7 +166,7 @@ async def get_customer_database(
                     seen_passports.add(passport)
 
                 all_customers.append({
-                    "id": f"tb-{booking_ref}-{name}",
+                    "id": f"tb-{booking_ref}-{name}-{idx}",
                     "full_name": name or "Unknown Passenger",
                     "phone": phone,
                     "email": email,
@@ -189,7 +187,7 @@ async def get_customer_database(
         for booking in umrah_bookings:
             booking_ref = booking.get("booking_reference", "")
             booking_date = booking.get("created_at", "")
-            for pax in (booking.get("passengers") or []):
+            for idx, pax in enumerate(booking.get("passengers") or []):
                 first = pax.get("first_name") or ""
                 last  = pax.get("last_name") or ""
                 name  = pax.get("name") or f"{first} {last}".strip()
@@ -203,7 +201,7 @@ async def get_customer_database(
                     seen_passports.add(passport)
 
                 all_customers.append({
-                    "id": f"ub-{booking_ref}-{name}",
+                    "id": f"ub-{booking_ref}-{name}-{idx}",
                     "full_name": name or "Unknown Passenger",
                     "phone": phone,
                     "email": email,
@@ -222,7 +220,7 @@ async def get_customer_database(
         for booking in custom_bookings:
             booking_ref = booking.get("booking_reference", "")
             booking_date = booking.get("created_at", "")
-            for pax in (booking.get("passengers") or []):
+            for idx, pax in enumerate(booking.get("passengers") or []):
                 first = pax.get("first_name") or ""
                 last  = pax.get("last_name") or ""
                 name  = pax.get("name") or f"{first} {last}".strip()
@@ -236,7 +234,7 @@ async def get_customer_database(
                     seen_passports.add(passport)
 
                 all_customers.append({
-                    "id": f"cb-{booking_ref}-{name}",
+                    "id": f"cb-{booking_ref}-{name}-{idx}",
                     "full_name": name or "Unknown Passenger",
                     "phone": phone,
                     "email": email,

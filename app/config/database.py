@@ -113,6 +113,7 @@ class Collections:
     # CRM Collections
     LEADS = "leads"
     PASSPORT_LEADS = "passport_leads"
+    TASKS = "tasks"
     CUSTOMERS = "customers"  # already set above, but alias here for clarity
 
     # Finance & Accounting Collections
