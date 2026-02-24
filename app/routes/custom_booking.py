@@ -17,6 +17,7 @@ router = APIRouter(prefix="/custom-bookings", tags=["Custom Bookings"])
 # ── Pydantic models ──────────────────────────────────────────────────────────
 
 class CustomPassengerData(BaseModel):
+    model_config = {"extra": "allow"}
     type: str                                    # adult | child | infant
     name: str
     title: Optional[str] = None
@@ -35,6 +36,15 @@ class CustomPassengerData(BaseModel):
     is_family_head: Optional[bool] = False
     family_head_name: Optional[str] = None
     family_head_passport: Optional[str] = None
+    # ── Per-passenger service status tracking ──
+    visa_status: Optional[str] = "Pending"       # Pending / Approved / Rejected
+    ticket_status: Optional[str] = "Pending"     # Pending / Confirmed / Cancelled
+    hotel_status: Optional[str] = "Pending"      # Pending / Checked In / Checked Out
+    food_status: Optional[str] = "Pending"       # Pending / Served
+    ziyarat_status: Optional[str] = "Pending"    # Pending / Completed
+    transport_status: Optional[str] = "Pending"  # Pending / Departed
+    # ── Shirka (Saudi company) — filled during order delivery ──
+    shirka: Optional[str] = None
 
 class CustomRoomSelection(BaseModel):
     family_id: Optional[str] = None
@@ -46,6 +56,9 @@ class CustomRoomSelection(BaseModel):
     nights: Optional[int] = 0
     rate_sar: Optional[float] = 0
     rate_pkr: Optional[float] = 0
+    # ── Hotel voucher — filled during order delivery ──
+    hotel_voucher_number: Optional[str] = None
+    hotel_brn: Optional[str] = None
 
 class CustomBookingCreate(BaseModel):
     package_details: Optional[Dict[str, Any]] = None   # full calculator state snapshot
@@ -57,6 +70,8 @@ class CustomBookingCreate(BaseModel):
     payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
     booking_status: str = "underprocess"
+    # Voucher status — starts as Draft, updated during delivery
+    voucher_status: Optional[str] = "Draft"
     notes: Optional[str] = None
     agency_details: Optional[Dict[str, Any]] = None
     branch_details: Optional[Dict[str, Any]] = None
@@ -64,10 +79,17 @@ class CustomBookingCreate(BaseModel):
 
 class CustomBookingUpdate(BaseModel):
     booking_status: Optional[str] = None
+    voucher_status: Optional[str] = None
     payment_method: Optional[str] = None
     payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
+    passengers: Optional[List[CustomPassengerData]] = None
+    rooms_selected: Optional[List[CustomRoomSelection]] = None
+    shirka: Optional[str] = None
+    # ── Transport voucher — filled during order delivery ──
+    transport_voucher_number: Optional[str] = None
+    transport_brn: Optional[str] = None
 
 PASSPORT_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
@@ -109,6 +131,9 @@ async def create_custom_booking(
     booking_dict['booking_reference'] = generate_booking_reference()
     booking_dict['created_by']        = current_user.get('email') or current_user.get('username')
     booking_dict['created_at']        = datetime.utcnow().isoformat()
+    # Set payment deadline (e.g., 3 hours from now)
+    from datetime import timedelta
+    booking_dict['payment_deadline'] = (datetime.utcnow() + timedelta(hours=3)).isoformat() + "Z"
 
     # ── resolve IDs from JWT ──
     role      = current_user.get('role')
@@ -145,6 +170,14 @@ async def create_custom_booking(
         if doc:
             booking_dict['organization_details'] = serialize_doc(doc)
 
+    # ── resolve flight ID → full flight doc so pricing is always available ──
+    pkg_details = booking_dict.get('package_details') or {}
+    flight_ref = pkg_details.get('flight')
+    if isinstance(flight_ref, str) and flight_ref:
+        flight_doc = await db_ops.get_by_id(Collections.FLIGHTS, flight_ref)
+        if flight_doc:
+            booking_dict['package_details']['flight'] = serialize_doc(flight_doc)
+            
     created = await db_ops.create(Collections.CUSTOM_BOOKINGS, booking_dict)
     return serialize_doc(created)
 
@@ -154,21 +187,28 @@ async def get_custom_bookings(
     booking_status: Optional[str] = None,
     payment_status: Optional[str] = None,
     booking_reference: Optional[str] = None,
+    organization_id: Optional[str] = None,
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 100,
     current_user: dict = Depends(get_current_user)
 ):
     filter_query = {}
-    
+
     role = current_user.get('role')
     entity_type = current_user.get('entity_type')
-    
-    if role == 'agency' or entity_type == 'agency':
+
+    if role in ('organization', 'org') or entity_type in ('organization', 'org'):
+        # Org users see all bookings under their org
+        oid = organization_id or current_user.get('organization_id') or current_user.get('sub')
+        if oid:
+            filter_query['organization_id'] = oid
+    elif role == 'agency' or entity_type == 'agency':
         aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['agency_id'] = aid
     elif role == 'branch' or entity_type == 'branch':
         bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['branch_id'] = bid
+
     if booking_status:
         filter_query['booking_status'] = booking_status
     if payment_status:
@@ -176,7 +216,25 @@ async def get_custom_bookings(
     if booking_reference:
         filter_query['booking_reference'] = {"$regex": booking_reference, "$options": "i"}
     bookings = await db_ops.get_all(Collections.CUSTOM_BOOKINGS, filter_query, skip=skip, limit=limit)
-    return serialize_docs(bookings)
+    serialized_bookings = serialize_docs(bookings)
+    
+    # ── Bulk enrich flight data for display ──
+    flight_ids = set()
+    for b in serialized_bookings:
+        f = (b.get('package_details') or {}).get('flight')
+        if isinstance(f, str) and f:
+            flight_ids.add(f)
+            
+    if flight_ids:
+        from bson import ObjectId
+        flight_docs = await db_ops.get_all(Collections.FLIGHTS, {"_id": {"$in": [ObjectId(fid) if isinstance(fid, str) and len(fid)==24 else fid for fid in list(flight_ids)]}})
+        flight_map = {str(f.get('_id') or f.get('id')): serialize_doc(f) for f in flight_docs}
+        for b in serialized_bookings:
+            f_ref = b.get('package_details', {}).get('flight')
+            if isinstance(f_ref, str) and f_ref in flight_map:
+                b['package_details']['flight'] = flight_map[f_ref]
+                
+    return serialized_bookings
 
 
 @router.get("/{booking_id}")
@@ -184,7 +242,18 @@ async def get_custom_booking(booking_id: str, current_user: dict = Depends(get_c
     booking = await db_ops.get_by_id(Collections.CUSTOM_BOOKINGS, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Custom booking not found")
-    return serialize_doc(booking)
+        
+    booking_data = serialize_doc(booking)
+    
+    # ── Enrich flight ──
+    pkg = booking_data.get('package_details') or {}
+    flight_ref = pkg.get('flight')
+    if isinstance(flight_ref, str) and flight_ref:
+        flight_doc = await db_ops.get_by_id(Collections.FLIGHTS, flight_ref)
+        if flight_doc:
+            booking_data['package_details']['flight'] = serialize_doc(flight_doc)
+            
+    return booking_data
 
 
 @router.put("/{booking_id}")
@@ -194,6 +263,7 @@ async def update_custom_booking(
     current_user: dict = Depends(get_current_user)
 ):
     update_data = booking_update.model_dump(exclude_unset=True)
+    print(f"DEBUG: update_custom_booking update_data: {update_data}")
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
     booking = await db_ops.get_by_id(Collections.CUSTOM_BOOKINGS, booking_id)

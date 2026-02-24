@@ -52,6 +52,8 @@ class DBOperations:
         collection = db_config.get_collection(collection_name)
         update_data["updated_at"] = datetime.utcnow()
         try:
+            with open("db_update_log.txt", "a") as f:
+                f.write(f"\n[{datetime.utcnow()}] Updating {collection_name} {doc_id} with {update_data}\n")
             result = await collection.find_one_and_update(
                 {"_id": ObjectId(doc_id)},
                 {"$set": update_data},
@@ -59,7 +61,10 @@ class DBOperations:
             )
             return result
         except Exception as e:
-            print(f"Error in update for {collection_name} with ID {doc_id}: {str(e)}")
+            error_msg = f"Error in update for {collection_name} with ID {doc_id}: {str(e)}"
+            print(error_msg)
+            with open("db_update_log.txt", "a") as f:
+                f.write(f"\n[{datetime.utcnow()}] ERROR: {error_msg}\n")
             return None
     
     @staticmethod

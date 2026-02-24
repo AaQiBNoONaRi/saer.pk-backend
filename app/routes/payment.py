@@ -93,11 +93,51 @@ async def create_payment(
         if not booking:
             raise HTTPException(status_code=404, detail="Related booking not found")
             
+    # Logic for credit payment — handle inline, skip saving to payments collection
+    if payment_method == "credit":
+        agency_id = payment_dict.get('agency_id')
+        if not agency_id:
+            raise HTTPException(status_code=400, detail="Agency ID is required for credit payments")
+        
+        agency = await db_ops.get_by_id(Collections.AGENCIES, agency_id)
+        if not agency:
+            raise HTTPException(status_code=404, detail="Agency not found")
+            
+        limit = float(agency.get("credit_limit") or 0)
+        used = float(agency.get("credit_used") or 0)
+        amount_to_pay = float(amount)
+        
+        if (limit - used) < amount_to_pay:
+            raise HTTPException(status_code=400, detail=f"Insufficient credit limit. Available: {limit - used}")
+        
+        # Deduct credit atomically
+        await db_ops.update(Collections.AGENCIES, agency_id, {"credit_used": used + amount_to_pay})
+        
+        # Update booking status directly — no payment record stored
+        if col_name:
+            await db_ops.update(col_name, booking_id, {
+                "payment_method": payment_method,
+                "payment_status": "paid",
+                "booking_status": "confirmed",
+                "paid_amount": amount_to_pay
+            })
+        
+        # Return a synthetic response (no DB record)
+        return {
+            "_id": "credit",
+            "booking_id": booking_id,
+            "booking_type": booking_type,
+            "payment_method": "credit",
+            "amount": amount_to_pay,
+            "status": "approved",
+            "payment_date": payment_dict.get('payment_date'),
+            "created_at": payment_dict.get('created_at'),
+        }
+
     # Allow manual deposits even if no booking ID exists natively.
     created_payment = await db_ops.create(Collections.PAYMENTS, payment_dict)
     
-    # If booking exists, update its payment_status and payment method without confirming paid
-    # Let the Organization manually confirm and mark it as 'paid'
+    # For non-credit: update booking with pending status
     if col_name:
         await db_ops.update(col_name, booking_id, {
             "payment_method": payment_method,
@@ -111,6 +151,7 @@ async def get_payments(
     status: Optional[str] = None,
     booking_id: Optional[str] = None,
     payment_method: Optional[str] = None,
+    exclude_credit: bool = False,
     skip: int = 0,
     limit: int = 100,
     current_user: dict = Depends(get_current_user)
@@ -131,6 +172,8 @@ async def get_payments(
         query['booking_id'] = booking_id
     if payment_method:
         query['payment_method'] = payment_method
+    if exclude_credit:
+        query['payment_method'] = {"$ne": "credit"}
         
     payments = await db_ops.get_all(Collections.PAYMENTS, query, skip=skip, limit=limit)
     return serialize_docs(payments)
@@ -192,7 +235,8 @@ async def update_payment_status(
         if col_name:
             await db_ops.update(col_name, payment.get('booking_id'), {
                 "payment_status": "paid",
-                "paid_amount": payment.get('amount')
+                "paid_amount": payment.get('amount'),
+                "booking_status": "confirmed"
             })
             
     return serialize_doc(updated_payment)
