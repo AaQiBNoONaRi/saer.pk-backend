@@ -61,6 +61,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
     if payload.get("emp_id") or payload.get("_id") or payload.get("email"):
         return payload
+    emp_id = payload.get("emp_id")
+
 
     if payload.get("agency_id"):
         return payload
@@ -139,7 +141,7 @@ async def require_branch_admin(current_user: Dict = Depends(get_current_user)) -
     if not emp_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid authentication token"
+            detail="Insufficient permissions"
         )
     
     emp_type = get_employee_type(emp_id)

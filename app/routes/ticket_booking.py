@@ -46,13 +46,17 @@ class BookingCreate(BaseModel):
     total_service_charge: Optional[float] = 0
     grand_total: Optional[float] = 0
     
+    # Discount fields
+    discount_group_id: Optional[str] = None
+    discount_amount: Optional[float] = 0
+    
     # Backwards compatible financial fields
     total_amount: Optional[float] = 0
     
     payment_method: Optional[str] = None
     payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = {}
-    booking_status: Optional[str] = "under_process"
+    booking_status: Optional[str] = "underprocess"
     notes: Optional[str] = None
     agency_details: Optional[Dict[str, Any]] = None
     branch_details: Optional[Dict[str, Any]] = None
@@ -106,6 +110,9 @@ async def create_ticket_booking(
     booking_dict['booking_reference'] = generate_booking_reference()
     booking_dict['created_by'] = current_user.get('email') or current_user.get('username')
     booking_dict['created_at'] = datetime.utcnow().isoformat()
+    # Set payment deadline (e.g., 3 hours from now)
+    from datetime import timedelta
+    booking_dict['payment_deadline'] = (datetime.utcnow() + timedelta(hours=3)).isoformat() + "Z"
 
     # ── resolve IDs from JWT (sub = entity _id; '_id' key is NOT in JWT payload) ──
     role      = current_user.get('role')

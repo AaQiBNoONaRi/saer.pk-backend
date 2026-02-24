@@ -80,6 +80,8 @@ async def agency_login(credentials: AgencyLogin):
         return {
             "access_token": access_token,
             "token_type": "bearer",
+            "agency_id": str(agency["_id"]),
+            "agency_name": agency.get("name"),
             "agency": agency_data
         }
         

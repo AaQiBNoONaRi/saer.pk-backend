@@ -52,6 +52,11 @@ class Collections:
     EMPLOYEES = "employees"
     CUSTOMERS = "customers"
     HOTELS = "hotels"
+    HOTEL_CATEGORIES = "hotel_categories"
+    HOTEL_FLOORS = "hotel_floors"
+    HOTEL_ROOMS = "hotel_rooms"
+    HOTEL_ROOM_BOOKINGS = "hotel_room_bookings"
+    BED_TYPES = "bed_types"
     FLIGHTS = "flights"
     TICKET_INVENTORY = "ticket_inventory"
     VISAS = "visas"
@@ -59,18 +64,17 @@ class Collections:
     FOOD = "food"
     ZIYARAT = "ziyarat"
     PACKAGES = "packages"
-    
-    # Separate Booking Collections
+    BOOKINGS = "bookings"
     TICKET_BOOKINGS = "ticket_bookings"
     UMRAH_BOOKINGS = "umrah_bookings"
     CUSTOM_BOOKINGS = "custom_bookings"
-    BOOKINGS = "bookings"  # Legacy - will be removed
-    
     LEDGER = "ledger"
     OPERATIONS = "operations"
     PAYMENTS = "payments"
-    BANK_ACCOUNTS = "bank_accounts"
     ADMINS = "admins"
+    BANK_ACCOUNTS = "bank_accounts"
+    BLOGS = "blogs"
+    FORMS = "forms"
     
     # Others Management Collections
     RIYAL_RATES = "riyal_rates"
@@ -85,11 +89,9 @@ class Collections:
     FLIGHT_IATA = "flight_iata"
     CITY_IATA = "city_iata"
     BOOKING_EXPIRY = "booking_expiry"
-    
-    # Financial Collections
-    DISCOUNTS = "discounts"
-    COMMISSIONS = "commissions"
     SERVICE_CHARGES = "service_charges"
+    COMMISSIONS = "commissions"
+    DISCOUNTS = "discounts"
     
     # Content Management Collections
     BLOGS = "blogs"
