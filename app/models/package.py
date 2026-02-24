@@ -39,6 +39,10 @@ class PackageTransportData(BaseModel):
     sector: str
     purchasing: float
     selling: float
+    # ── Sector routing — for invoice/order delivery route display ──
+    big_sector_id: Optional[str] = None
+    small_sector_ids: List[str] = Field(default=[])
+    small_sectors: List[Dict[str, Any]] = Field(default=[])
 
 class PackageBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)

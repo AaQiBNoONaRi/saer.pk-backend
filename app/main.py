@@ -4,8 +4,11 @@ Main FastAPI application
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import asyncio
 from app.config.database import db_config
 from app.config.settings import settings
+from app.services.expiry_scheduler import run_expiry_scheduler
+
 from app.routes import (
     organization,
     branch,
@@ -44,8 +47,15 @@ async def lifespan(app: FastAPI):
     # Startup
     await db_config.connect_db()
     print(f"🚀 {settings.APP_NAME} v{settings.VERSION} started")
+    # Start the booking expiry background scheduler
+    expiry_task = asyncio.create_task(run_expiry_scheduler(interval_seconds=60))
     yield
     # Shutdown
+    expiry_task.cancel()
+    try:
+        await expiry_task
+    except asyncio.CancelledError:
+        pass
     await db_config.close_db()
     print("👋 Application shutdown")
 
