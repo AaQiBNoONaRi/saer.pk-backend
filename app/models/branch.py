@@ -15,6 +15,8 @@ class BranchBase(BaseModel):
     address: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
+    commission_group_id: Optional[str] = Field(default=None, description="Commission group for branch")
+    service_charge_group_id: Optional[str] = Field(default=None, description="Service charge group for branch")
     is_active: bool = True
     portal_access_enabled: bool = True
     username: Optional[str] = None
@@ -37,6 +39,8 @@ class BranchUpdate(BaseModel):
     address: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
+    commission_group_id: Optional[str] = None
+    service_charge_group_id: Optional[str] = None
     is_active: Optional[bool] = None
     portal_access_enabled: Optional[bool] = None
     username: Optional[str] = None

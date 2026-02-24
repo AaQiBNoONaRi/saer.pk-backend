@@ -14,6 +14,9 @@ class AgencyBase(BaseModel):
     address: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
+    agency_type: Optional[str] = Field(default="full", description="full or area")
+    discount_group_id: Optional[str] = Field(default=None, description="For full agencies")
+    commission_group_id: Optional[str] = Field(default=None, description="For area agencies")
     credit_limit: float = Field(default=0.0, ge=0)
     credit_used: float = Field(default=0.0, ge=0)
     is_active: bool = True
@@ -28,6 +31,9 @@ class AgencyUpdate(BaseModel):
     address: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
+    agency_type: Optional[str] = None
+    discount_group_id: Optional[str] = None
+    commission_group_id: Optional[str] = None
     credit_limit: Optional[float] = Field(None, ge=0)
     credit_used: Optional[float] = Field(None, ge=0)
     is_active: Optional[bool] = None

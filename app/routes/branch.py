@@ -52,6 +52,21 @@ async def get_branches(
     """Get all branches, optionally filtered by organization"""
     filter_query = {"organization_id": organization_id} if organization_id else {}
     branches = await db_ops.get_all(Collections.BRANCHES, filter_query, skip=skip, limit=limit)
+    
+    # Populate groups for each branch
+    for branch in branches:
+        # Populate commission group
+        if branch.get("commission_group_id"):
+            commission_group = await db_ops.get_by_id(Collections.COMMISSIONS, branch["commission_group_id"])
+            if commission_group:
+                branch["commission_group"] = serialize_doc(commission_group)
+        
+        # Populate service charge group
+        if branch.get("service_charge_group_id"):
+            service_charge_group = await db_ops.get_by_id(Collections.SERVICE_CHARGES, branch["service_charge_group_id"])
+            if service_charge_group:
+                branch["service_charge_group"] = serialize_doc(service_charge_group)
+    
     return serialize_docs(branches)
 
 @router.get("/{branch_id}", response_model=BranchResponse)
@@ -66,6 +81,19 @@ async def get_branch(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Branch not found"
         )
+    
+    # Populate commission group
+    if branch.get("commission_group_id"):
+        commission_group = await db_ops.get_by_id(Collections.COMMISSIONS, branch["commission_group_id"])
+        if commission_group:
+            branch["commission_group"] = serialize_doc(commission_group)
+    
+    # Populate service charge group
+    if branch.get("service_charge_group_id"):
+        service_charge_group = await db_ops.get_by_id(Collections.SERVICE_CHARGES, branch["service_charge_group_id"])
+        if service_charge_group:
+            branch["service_charge_group"] = serialize_doc(service_charge_group)
+    
     return serialize_doc(branch)
 
 @router.put("/{branch_id}", response_model=BranchResponse)

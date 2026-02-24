@@ -3,6 +3,7 @@ Hotel routes
 """
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
+from datetime import date, datetime
 from app.models.hotel import HotelCreate, HotelUpdate, HotelResponse
 from app.database.db_operations import db_ops
 from app.config.database import Collections
@@ -11,6 +12,26 @@ from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/hotels", tags=["Inventory: Hotels"])
 
+def convert_dates_to_strings(data: dict) -> dict:
+    """Convert date objects to ISO format strings for MongoDB compatibility"""
+    result = data.copy()
+    
+    # Convert top-level date fields
+    if 'available_from' in result and isinstance(result['available_from'], date):
+        result['available_from'] = result['available_from'].isoformat()
+    if 'available_until' in result and isinstance(result['available_until'], date):
+        result['available_until'] = result['available_until'].isoformat()
+    
+    # Convert date fields in prices array
+    if 'prices' in result and isinstance(result['prices'], list):
+        for price in result['prices']:
+            if 'date_from' in price and isinstance(price['date_from'], date):
+                price['date_from'] = price['date_from'].isoformat()
+            if 'date_to' in price and isinstance(price['date_to'], date):
+                price['date_to'] = price['date_to'].isoformat()
+    
+    return result
+
 @router.post("/", response_model=HotelResponse, status_code=status.HTTP_201_CREATED)
 async def create_hotel(
     hotel: HotelCreate,
@@ -18,6 +39,7 @@ async def create_hotel(
 ):
     """Create a new hotel"""
     hotel_dict = hotel.model_dump()
+    hotel_dict = convert_dates_to_strings(hotel_dict)
     created_hotel = await db_ops.create(Collections.HOTELS, hotel_dict)
     return serialize_doc(created_hotel)
 
@@ -63,7 +85,8 @@ async def update_hotel(
     update_data = hotel_update.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
-        
+    
+    update_data = convert_dates_to_strings(update_data)
     updated_hotel = await db_ops.update(Collections.HOTELS, hotel_id, update_data)
     if not updated_hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")

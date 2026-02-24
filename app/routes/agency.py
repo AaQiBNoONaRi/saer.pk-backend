@@ -69,14 +69,57 @@ async def get_agencies(
     
     agencies = await db_ops.get_all(Collections.AGENCIES, filter_query, skip=skip, limit=limit)
     
-    # Add available_credit to each agency
+    # Add available_credit and populate groups for each agency
     for agency in agencies:
         agency["available_credit"] = calculate_available_credit(
             agency.get("credit_limit", 0),
             agency.get("credit_used", 0)
         )
+        
+        # Populate discount group for full agencies
+        if agency.get("discount_group_id"):
+            discount_group = await db_ops.get_by_id(Collections.DISCOUNTS, agency["discount_group_id"])
+            if discount_group:
+                agency["discount_group"] = serialize_doc(discount_group)
+        
+        # Populate commission group for area agencies
+        if agency.get("commission_group_id"):
+            commission_group = await db_ops.get_by_id(Collections.COMMISSIONS, agency["commission_group_id"])
+            if commission_group:
+                agency["commission_group"] = serialize_doc(commission_group)
     
     return serialize_docs(agencies)
+
+@router.get("/me", response_model=AgencyResponse)
+async def get_current_agency(current_user: dict = Depends(get_current_user)):
+    """Get current authenticated agency information"""
+    agency = await db_ops.get_by_id(Collections.AGENCIES, current_user["sub"])
+    
+    if not agency:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agency not found"
+        )
+    
+    # Add available_credit
+    agency["available_credit"] = calculate_available_credit(
+        agency.get("credit_limit", 0),
+        agency.get("credit_used", 0)
+    )
+    
+    # Populate discount group for full agencies
+    if agency.get("discount_group_id"):
+        discount_group = await db_ops.get_by_id(Collections.DISCOUNTS, agency["discount_group_id"])
+        if discount_group:
+            agency["discount_group"] = serialize_doc(discount_group)
+    
+    # Populate commission group for area agencies
+    if agency.get("commission_group_id"):
+        commission_group = await db_ops.get_by_id(Collections.COMMISSIONS, agency["commission_group_id"])
+        if commission_group:
+            agency["commission_group"] = serialize_doc(commission_group)
+    
+    return serialize_doc(agency)
 
 @router.get("/{agency_id}", response_model=AgencyResponse)
 async def get_agency(
@@ -96,6 +139,18 @@ async def get_agency(
         agency.get("credit_limit", 0),
         agency.get("credit_used", 0)
     )
+    
+    # Populate discount group for full agencies
+    if agency.get("discount_group_id"):
+        discount_group = await db_ops.get_by_id(Collections.DISCOUNTS, agency["discount_group_id"])
+        if discount_group:
+            agency["discount_group"] = serialize_doc(discount_group)
+    
+    # Populate commission group for area agencies
+    if agency.get("commission_group_id"):
+        commission_group = await db_ops.get_by_id(Collections.COMMISSIONS, agency["commission_group_id"])
+        if commission_group:
+            agency["commission_group"] = serialize_doc(commission_group)
     
     return serialize_doc(agency)
 

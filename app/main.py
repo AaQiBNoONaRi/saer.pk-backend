@@ -30,7 +30,12 @@ from app.routes import (
     hotel_room_booking,
     blog,
     form,
+    bank_account,
     payment,
+    # Booking Routers
+    ticket_booking,
+    umrah_booking,
+    custom_booking,
 )
 
 @asynccontextmanager

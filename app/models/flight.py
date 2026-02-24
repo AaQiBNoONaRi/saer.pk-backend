@@ -79,8 +79,8 @@ class FlightUpdate(BaseModel):
 
 class FlightResponse(FlightBase):
     id: str = Field(alias="_id")
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
     is_shared: Optional[bool] = False
     shared_from_org_id: Optional[str] = None
 
@@ -90,12 +90,3 @@ class FlightResponse(FlightBase):
             datetime: lambda v: v.isoformat()
         }
     }
-
-    created_at: datetime
-    updated_at: datetime
-    
-    class Config:
-        populate_by_name = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }

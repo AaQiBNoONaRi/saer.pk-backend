@@ -46,6 +46,10 @@ class BookingCreate(BaseModel):
     total_service_charge: Optional[float] = 0
     grand_total: Optional[float] = 0
     
+    # Discount fields
+    discount_group_id: Optional[str] = None
+    discount_amount: Optional[float] = 0
+    
     # Backwards compatible financial fields
     total_amount: Optional[float] = 0
     

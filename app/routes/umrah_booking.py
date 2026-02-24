@@ -52,6 +52,8 @@ class UmrahBookingCreate(BaseModel):
     passengers: List[PassengerData] = []
     total_passengers: int = 0
     total_amount: float = 0
+    discount_group_id: Optional[str] = None  # ID of the discount group applied
+    discount_amount: Optional[float] = 0     # Calculated discount amount
     payment_method: Optional[str] = None
     payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
