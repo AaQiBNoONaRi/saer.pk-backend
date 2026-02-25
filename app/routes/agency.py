@@ -3,27 +3,15 @@ Agency routes
 """
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
-from app.models.agency import AgencyCreate, AgencyUpdate
+from app.models.agency import AgencyCreate, AgencyUpdate, AgencyResponse
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs, calculate_available_credit
-from app.utils.auth import get_current_user, require_org_admin, require_branch_admin, hash_password
+from app.utils.auth import get_current_user, require_org_admin, require_branch_admin
 
 router = APIRouter(prefix="/agencies", tags=["Agencies"])
 
-def add_available_credit(agency_doc):
-    """Safely add available_credit to an agency document"""
-    try:
-        limit = float(agency_doc.get("credit_limit") or 0)
-        used = float(agency_doc.get("credit_used") or 0)
-        agency_doc["available_credit"] = calculate_available_credit(limit, used)
-    except Exception:
-        agency_doc["available_credit"] = 0.0
-    # Remove password from response
-    agency_doc.pop("password", None)
-    return agency_doc
-
-@router.post("/", status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=AgencyResponse, status_code=status.HTTP_201_CREATED)
 async def create_agency(
     agency: AgencyCreate,
     current_user: dict = Depends(require_org_admin)
@@ -53,27 +41,18 @@ async def create_agency(
             detail="Agency with this email already exists"
         )
     
-    # Validate password when portal access is enabled
-    if agency.portal_access_enabled and not agency.password:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Password is required when portal access is enabled"
-        )
-    
     agency_dict = agency.model_dump()
-    
-    # Hash password if provided
-    if "password" in agency_dict and agency_dict["password"]:
-        agency_dict["password"] = hash_password(agency_dict["password"])
-    else:
-        # Remove password field if not provided
-        agency_dict.pop("password", None)
-        
     created_agency = await db_ops.create(Collections.AGENCIES, agency_dict)
     
-    return add_available_credit(serialize_doc(created_agency))
+    # Add available_credit field
+    created_agency["available_credit"] = calculate_available_credit(
+        created_agency["credit_limit"],
+        created_agency["credit_used"]
+    )
+    
+    return serialize_doc(created_agency)
 
-@router.get("/")
+@router.get("/", response_model=List[AgencyResponse])
 async def get_agencies(
     organization_id: str = None,
     branch_id: str = None,
@@ -90,15 +69,59 @@ async def get_agencies(
     
     agencies = await db_ops.get_all(Collections.AGENCIES, filter_query, skip=skip, limit=limit)
     
-    result = []
+    # Add available_credit and populate groups for each agency
     for agency in agencies:
-        doc = serialize_doc(agency)
-        add_available_credit(doc)
-        result.append(doc)
+        agency["available_credit"] = calculate_available_credit(
+            agency.get("credit_limit", 0),
+            agency.get("credit_used", 0)
+        )
+        
+        # Populate discount group for full agencies
+        if agency.get("discount_group_id"):
+            discount_group = await db_ops.get_by_id(Collections.DISCOUNTS, agency["discount_group_id"])
+            if discount_group:
+                agency["discount_group"] = serialize_doc(discount_group)
+        
+        # Populate commission group for area agencies
+        if agency.get("commission_group_id"):
+            commission_group = await db_ops.get_by_id(Collections.COMMISSIONS, agency["commission_group_id"])
+            if commission_group:
+                agency["commission_group"] = serialize_doc(commission_group)
     
-    return result
+    return serialize_docs(agencies)
 
-@router.get("/{agency_id}")
+@router.get("/me", response_model=AgencyResponse)
+async def get_current_agency(current_user: dict = Depends(get_current_user)):
+    """Get current authenticated agency information"""
+    agency = await db_ops.get_by_id(Collections.AGENCIES, current_user["sub"])
+    
+    if not agency:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agency not found"
+        )
+    
+    # Add available_credit
+    agency["available_credit"] = calculate_available_credit(
+        agency.get("credit_limit", 0),
+        agency.get("credit_used", 0)
+    )
+    
+    # Populate discount group for full agencies
+    if agency.get("discount_group_id"):
+        discount_group = await db_ops.get_by_id(Collections.DISCOUNTS, agency["discount_group_id"])
+        if discount_group:
+            agency["discount_group"] = serialize_doc(discount_group)
+    
+    # Populate commission group for area agencies
+    if agency.get("commission_group_id"):
+        commission_group = await db_ops.get_by_id(Collections.COMMISSIONS, agency["commission_group_id"])
+        if commission_group:
+            agency["commission_group"] = serialize_doc(commission_group)
+    
+    return serialize_doc(agency)
+
+@router.get("/{agency_id}", response_model=AgencyResponse)
 async def get_agency(
     agency_id: str,
     current_user: dict = Depends(get_current_user)
@@ -111,9 +134,27 @@ async def get_agency(
             detail="Agency not found"
         )
     
-    return add_available_credit(serialize_doc(agency))
+    # Add available_credit
+    agency["available_credit"] = calculate_available_credit(
+        agency.get("credit_limit", 0),
+        agency.get("credit_used", 0)
+    )
+    
+    # Populate discount group for full agencies
+    if agency.get("discount_group_id"):
+        discount_group = await db_ops.get_by_id(Collections.DISCOUNTS, agency["discount_group_id"])
+        if discount_group:
+            agency["discount_group"] = serialize_doc(discount_group)
+    
+    # Populate commission group for area agencies
+    if agency.get("commission_group_id"):
+        commission_group = await db_ops.get_by_id(Collections.COMMISSIONS, agency["commission_group_id"])
+        if commission_group:
+            agency["commission_group"] = serialize_doc(commission_group)
+    
+    return serialize_doc(agency)
 
-@router.put("/{agency_id}")
+@router.put("/{agency_id}", response_model=AgencyResponse)
 async def update_agency(
     agency_id: str,
     agency_update: AgencyUpdate,
@@ -121,10 +162,6 @@ async def update_agency(
 ):
     """Update agency (Branch Admin or higher)"""
     update_data = agency_update.model_dump(exclude_unset=True)
-    
-    # Hash password if present
-    if "password" in update_data and update_data["password"]:
-        update_data["password"] = hash_password(update_data["password"])
     
     if not update_data:
         raise HTTPException(
@@ -139,7 +176,13 @@ async def update_agency(
             detail="Agency not found"
         )
     
-    return add_available_credit(serialize_doc(updated_agency))
+    # Add available_credit
+    updated_agency["available_credit"] = calculate_available_credit(
+        updated_agency.get("credit_limit", 0),
+        updated_agency.get("credit_used", 0)
+    )
+    
+    return serialize_doc(updated_agency)
 
 @router.delete("/{agency_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agency(

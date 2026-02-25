@@ -63,6 +63,8 @@ async def agency_login(credentials: AgencyLogin):
         token_data = {
             "sub": str(agency["_id"]),
             "email": agency["email"],
+            "full_name": agency.get("full_name") or agency.get("name", ""),
+            "name": agency.get("name") or agency.get("full_name", ""),
             "role": "agency",
             "agency_id": str(agency["_id"]),
             "branch_id": agency.get("branch_id"),
@@ -78,6 +80,8 @@ async def agency_login(credentials: AgencyLogin):
         return {
             "access_token": access_token,
             "token_type": "bearer",
+            "agency_id": str(agency["_id"]),
+            "agency_name": agency.get("name"),
             "agency": agency_data
         }
         

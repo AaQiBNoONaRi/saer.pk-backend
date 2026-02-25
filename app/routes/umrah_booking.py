@@ -11,6 +11,7 @@ from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from app.finance.journal_engine import create_umrah_booking_journal
 
 router = APIRouter(prefix="/umrah-bookings", tags=["Umrah Bookings"])
 
@@ -74,6 +75,8 @@ class UmrahBookingCreate(BaseModel):
     passengers: List[PassengerData] = []
     total_passengers: int = 0
     total_amount: float = 0
+    discount_group_id: Optional[str] = None  # ID of the discount group applied
+    discount_amount: Optional[float] = 0     # Calculated discount amount
     payment_method: Optional[str] = None
     payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
@@ -261,7 +264,22 @@ async def create_umrah_booking(
     booking_dict['voucher_status'] = 'Draft'
 
     created_booking = await db_ops.create(Collections.UMRAH_BOOKINGS, booking_dict)
-    return serialize_doc(created_booking)
+    created = serialize_doc(created_booking)
+
+    # ── Auto-generate double-entry journal ──────────────────────────────────
+    try:
+        await create_umrah_booking_journal(
+            booking=created,
+            organization_id=org_id,
+            branch_id=branch_id,
+            agency_id=agency_id,
+            created_by=booking_dict['created_by'],
+        )
+    except Exception as je:
+        # Journal failure must NOT block the booking – log and continue
+        print(f"⚠️  Journal engine warning for {created.get('booking_reference')}: {je}")
+
+    return created
 
 @router.get("/")
 async def get_umrah_bookings(

@@ -22,6 +22,12 @@ class DBOperations:
     async def get_by_id(collection_name: str, doc_id: str) -> Optional[Dict]:
         """Get a single document by ID"""
         collection = db_config.get_collection(collection_name)
+        try:
+            document = await collection.find_one({"_id": ObjectId(doc_id)})
+            return document
+        except Exception:
+            return None
+    
         document = await collection.find_one({"_id": ObjectId(doc_id)})
         return document
 

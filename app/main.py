@@ -13,37 +13,45 @@ from app.routes import (
     organization,
     branch,
     agency,
-    branch_auth,
-    agency_auth,
     employee,
-    hotel,
+    hotel, # Old name, might need rename if I changed the file name
     flight,
     transport,
     admin,
     others,
     package,
+    branch_auth,
+    agency_auth,
     discount,
     commission,
     service_charge,
-    ticket_booking,
-    umrah_booking,
-    custom_booking,
     # Hotel PMS Routers
     hotel_category,
     bed_type,
     hotel_floor,
     hotel_room,
     hotel_room_booking,
-    # Shared Inventory
-    org_links,
-    inventory_shares,
-    # Flight Search (AIQS)
-    flight_search,
-    bank_account,
     blog,
     form,
+    bank_account,
+    # Payment System (Kuickapay)
     payment,
+    # Booking Routers
+    ticket_booking,
+    umrah_booking,
+    custom_booking,
+    # Pax Movement
+    pax_movement,
+    # Daily Operations
+    operations,
+    # CRM
+    leads,
+    passport_leads,
+    customers,
+    tasks,
+    role_groups,
 )
+from app.finance import routes as finance_routes
 
 
 @asynccontextmanager
@@ -71,49 +79,28 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware - Must be added before other middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://localhost:5174",
+        "http://localhost:5174", 
         "http://localhost:5175",
-        "http://localhost:5176",
-        "http://localhost:5177",
+        "http://localhost:5176",  # Agency portal
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
         "http://127.0.0.1:5176",
-        "http://127.0.0.1:5177",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Request logging middleware
 from fastapi import Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
 import time
-import json
-
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    body = None
-    try:
-        body = await request.json()
-    except Exception:
-        pass
-    # Round-trip through json with default=str to handle non-serializable objects (e.g. ValueError)
-    safe_errors = json.loads(json.dumps(exc.errors(), default=str))
-    print("\n" + "="*60)
-    print(f"❌ 422 VALIDATION ERROR on {request.method} {request.url.path}")
-    print(f"📋 ERRORS: {json.dumps(safe_errors, indent=2)}")
-    if body:
-        print(f"📦 BODY SENT: {json.dumps(body, indent=2, default=str)}")
-    print("="*60 + "\n")
-    return JSONResponse(status_code=422, content={"detail": safe_errors})
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
@@ -155,11 +142,6 @@ app.include_router(package.router, prefix="/api")
 app.include_router(discount.router, prefix="/api")
 app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
-# Shared Inventory
-app.include_router(org_links.router, prefix="/api")
-app.include_router(inventory_shares.router, prefix="/api")
-# Flight Search (AIQS)
-app.include_router(flight_search.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
@@ -168,6 +150,21 @@ app.include_router(payment.router, prefix="/api")
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
 app.include_router(custom_booking.router, prefix="/api")
+app.include_router(pax_movement.router, prefix="/api")
+app.include_router(operations.router, prefix="/api")
+
+# Payment System (Kuickapay)
+app.include_router(payment.router)
+
+# CRM
+app.include_router(leads.router, prefix="/api")
+app.include_router(passport_leads.router, prefix="/api")
+app.include_router(customers.router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")
+app.include_router(role_groups.router, prefix="/api")
+
+# Finance & Accounting Module
+app.include_router(finance_routes.router, prefix="/api")
 
 
 

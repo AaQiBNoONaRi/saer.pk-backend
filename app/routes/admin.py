@@ -14,46 +14,25 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/admin/login")
 async def admin_login(credentials: AdminLogin):
     """
     Authenticate admin user and return JWT token
-    Supports login from both admins and organizations collections
     """
-    user = None
-    user_type = None
-    
-    # First, try to find in admins collection by username
+    # Find admin by username
     admin = await db_ops.get_one(Collections.ADMINS, {"username": credentials.username})
-    if admin:
-        user = admin
-        user_type = "admin"
     
-    # If not found in admins, try organizations collection
-    # Check by email or username
-    if not user:
-        org = await db_ops.get_one(Collections.ORGANIZATIONS, {
-            "$or": [
-                {"email": credentials.username},
-                {"username": credentials.username}
-            ]
-        })
-        if org and org.get("portal_access_enabled", False):
-            user = org
-            user_type = "organization"
-    
-    # If user not found in either collection
-    if not user:
+    if not admin:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password"
         )
     
     # Verify password
-    if not verify_password(credentials.password, user["password"]):
+    if not verify_password(credentials.password, admin["password"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or password"
         )
     
-    # Check if user is active
-    if not user.get("is_active", True):
+    # Check if admin is active
+    if not admin.get("is_active", True):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated"
@@ -61,25 +40,27 @@ async def admin_login(credentials: AdminLogin):
     
     # Create access token
     token_data = {
-        "sub": str(user["_id"]),
-        "username": user.get("username") or user.get("email"),
-        "role": user.get("role", "organization" if user_type == "organization" else "admin"),
-        "organization_id": str(user["_id"]) if user_type == "organization" else user.get("organization_id"),
-        "user_type": user_type
+        "sub": str(admin["_id"]),
+        "username": admin["username"],
+        "full_name": admin.get("full_name") or admin.get("name", ""),
+        "name": admin.get("name") or admin.get("full_name", ""),
+        "role": admin.get("role", "admin"),
+        "organization_id": admin.get("organization_id"),
+        "user_type": "admin"
     }
     access_token = create_access_token(data=token_data)
     
     # Prepare admin response
     admin_response = AdminResponse(
-        _id=str(user["_id"]),
-        username=user.get("username") or user.get("email"),
-        email=user["email"],
-        full_name=user.get("full_name") or user.get("name", ""),
-        organization_id=str(user["_id"]) if user_type == "organization" else user.get("organization_id", ""),
-        role=user.get("role", "organization" if user_type == "organization" else "admin"),
-        is_active=user.get("is_active", True),
-        created_at=user.get("created_at", datetime.utcnow()),
-        updated_at=user.get("updated_at", datetime.utcnow())
+        _id=str(admin["_id"]),
+        username=admin["username"],
+        email=admin["email"],
+        full_name=admin["full_name"],
+        organization_id=admin["organization_id"],
+        role=admin.get("role", "admin"),
+        is_active=admin.get("is_active", True),
+        created_at=admin.get("created_at", datetime.utcnow()),
+        updated_at=admin.get("updated_at", datetime.utcnow())
     )
     
     return AdminLoginResponse(

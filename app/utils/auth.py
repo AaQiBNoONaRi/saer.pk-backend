@@ -3,25 +3,25 @@ Authentication utilities - JWT, password hashing, and permission checks
 """
 from datetime import datetime, timedelta
 from typing import Optional, Dict
+import bcrypt
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.config.settings import settings
-
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # JWT Bearer token
 security = HTTPBearer()
 
 def hash_password(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt directly"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password against its hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against its bcrypt hash"""
+    try:
+        return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
+    except Exception:
+        return False
 
 def create_access_token(data: Dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token"""
@@ -40,7 +40,9 @@ def decode_access_token(token: str) -> Dict:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         return payload
-    except JWTError:
+    except JWTError as e:
+        import sys
+        print(f"JWT Verification Failed: {str(e)}. Token: {token[:20]}...", file=sys.stderr)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
@@ -51,26 +53,30 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     """Get current authenticated user from JWT token"""
     token = credentials.credentials
     payload = decode_access_token(token)
-    
-    # Check for admin token (has 'sub' field)
+    # Accept tokens that clearly identify a valid user or entity.
+    # Support admin tokens ('sub'), employee tokens ('emp_id' or '_id' or 'email'),
+    # agency tokens ('agency_id'), and tokens that include organization context ('organization_id').
     if payload.get("sub"):
         return payload
-    
-    # Check for employee token (has 'emp_id' field)
-    if payload.get("emp_id"):
+
+    if payload.get("emp_id") or payload.get("_id") or payload.get("email"):
         return payload
-    
-    # Check for agency token (has 'agency_id' field)
+    emp_id = payload.get("emp_id")
+
+
     if payload.get("agency_id"):
         return payload
-    
+
+    if payload.get("organization_id"):
+        return payload
+
     # If none of the expected fields are present, reject the token
+    import sys
+    print(f"AUTH REJECTED: Invalid token payload format. Payload received: {payload}", file=sys.stderr)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid authentication credentials"
     )
-    
-    return payload
 
 def get_employee_type(emp_id: str) -> str:
     """Extract employee type from emp_id prefix"""
@@ -135,7 +141,7 @@ async def require_branch_admin(current_user: Dict = Depends(get_current_user)) -
     if not emp_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid authentication token"
+            detail="Insufficient permissions"
         )
     
     emp_type = get_employee_type(emp_id)

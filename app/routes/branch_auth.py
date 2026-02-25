@@ -63,6 +63,8 @@ async def branch_login(credentials: BranchLogin):
         token_data = {
             "sub": str(branch["_id"]),
             "email": branch["email"],
+            "full_name": branch.get("full_name") or branch.get("name", ""),
+            "name": branch.get("name") or branch.get("full_name", ""),
             "role": "branch",
             "branch_id": str(branch["_id"]),
             "organization_id": branch.get("organization_id"),

@@ -14,8 +14,6 @@ class StopoverDetails(BaseModel):
     arrival_datetime: datetime
     stopover_city: str
     arrival_city: str
-    departure_time: Optional[str] = None
-    arrival_time: Optional[str] = None
     wait_time: str
 
 class TripDetails(BaseModel):
@@ -30,15 +28,12 @@ class TripDetails(BaseModel):
     arrival_datetime: datetime
     departure_city: str
     arrival_city: str
-    departure_time: Optional[str] = None
-    arrival_time: Optional[str] = None
     
     # Stopover details (only if flight has stops)
     stopover: Optional[StopoverDetails] = None
 
 class TicketInventoryBase(BaseModel):
     # Group information
-    organization_id: str = Field(..., description="ID of the organization that owns this inventory")
     group_name: str = Field(..., min_length=1, max_length=200)
     group_type: str = Field(..., description="e.g., Umrah, Hajj, Tourism")
     
@@ -62,12 +57,9 @@ class TicketInventoryBase(BaseModel):
     
     # Status
     is_active: bool = True
-    
-    # PNR Reference
-    pnr: Optional[str] = None
 
 class TicketInventoryCreate(TicketInventoryBase):
-    organization_id: Optional[str] = None
+    pass
 
 class TicketInventoryUpdate(BaseModel):
     group_name: Optional[str] = None

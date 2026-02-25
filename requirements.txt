@@ -4,8 +4,7 @@ motor
 pydantic
 pydantic-settings
 python-jose[cryptography]
-passlib[bcrypt]
-bcrypt==3.2.0
+bcrypt>=4.0.0
 python-multipart
 python-dotenv
 email-validator
@@ -13,3 +12,6 @@ pymongo<4.7
 httpx
 websockets
 PyJWT
+# Finance & Accounting – report generation
+openpyxl
+reportlab
