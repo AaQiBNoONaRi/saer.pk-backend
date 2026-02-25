@@ -40,13 +40,13 @@ async def admin_login(credentials: AdminLogin):
     
     # Create access token
     token_data = {
-        "sub": str(user["_id"]),
-        "username": user.get("username") or user.get("email"),
-        "full_name": user.get("full_name") or user.get("name", ""),
-        "name": user.get("name") or user.get("full_name", ""),
-        "role": user.get("role", "organization" if user_type == "organization" else "admin"),
-        "organization_id": str(user["_id"]) if user_type == "organization" else user.get("organization_id"),
-        "user_type": user_type
+        "sub": str(admin["_id"]),
+        "username": admin["username"],
+        "full_name": admin.get("full_name") or admin.get("name", ""),
+        "name": admin.get("name") or admin.get("full_name", ""),
+        "role": admin.get("role", "admin"),
+        "organization_id": admin.get("organization_id"),
+        "user_type": "admin"
     }
     access_token = create_access_token(data=token_data)
     

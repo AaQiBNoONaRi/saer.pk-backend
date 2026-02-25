@@ -1,7 +1,7 @@
 """
 Hotel model and schemas
 """
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Any, Dict
 from datetime import datetime, date
 
@@ -45,11 +45,6 @@ class HotelBase(BaseModel):
     allow_reselling: bool = Field(default=False)
     is_active: bool = Field(default=True)
 
-
-    # Settings
-    allow_reselling: bool = False
-    is_active: bool = True
-
     @field_validator('available_until', mode='after')
     @classmethod
     def validate_availability(cls, v, info):
@@ -85,18 +80,14 @@ class HotelResponse(HotelBase):
     created_at: datetime
     updated_at: datetime
     
-    class Config:
-        populate_by_name = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-            date: lambda v: v.isoformat()
-        }
     organization_id: Optional[str] = None
     category_name: Optional[str] = None
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
 
     model_config = {
         "populate_by_name": True,
         "arbitrary_types_allowed": True,
+        "json_encoders": {
+            datetime: lambda v: v.isoformat(),
+            date: lambda v: v.isoformat()
+        }
     }
