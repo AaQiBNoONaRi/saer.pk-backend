@@ -47,6 +47,7 @@ class CustomPassengerData(BaseModel):
     shirka: Optional[str] = None
 
 class CustomRoomSelection(BaseModel):
+    model_config = {"extra": "allow"}
     family_id: Optional[str] = None
     hotel_id: Optional[str] = None
     hotel_name: Optional[str] = None
@@ -61,6 +62,7 @@ class CustomRoomSelection(BaseModel):
     hotel_brn: Optional[str] = None
 
 class CustomBookingCreate(BaseModel):
+    model_config = {"extra": "allow"}
     package_details: Optional[Dict[str, Any]] = None   # full calculator state snapshot
     rooms_selected: List[CustomRoomSelection] = []
     passengers: List[CustomPassengerData] = []
@@ -76,8 +78,29 @@ class CustomBookingCreate(BaseModel):
     agency_details: Optional[Dict[str, Any]] = None
     branch_details: Optional[Dict[str, Any]] = None
     organization_details: Optional[Dict[str, Any]] = None
+    # ── Food & Ziyarat vouchers ──
+    food_voucher_number: Optional[str] = None
+    food_brn: Optional[str] = None
+    ziyarat_voucher_number: Optional[str] = None
+    ziyarat_brn: Optional[str] = None
+    # ── SAR/PKR dual pricing ──────────────────────────────────────────────────
+    # Exchange rate snapshot (1 SAR = X PKR at time of booking)
+    sar_to_pkr_rate: Optional[float] = None
+    # Per-service: _sar = original SAR amount (null if service is PKR-based)
+    #              _pkr = final PKR amount always populated
+    visa_cost_sar: Optional[float] = None
+    visa_cost_pkr: Optional[float] = None
+    hotel_cost_sar: Optional[float] = None
+    hotel_cost_pkr: Optional[float] = None
+    transport_cost_sar: Optional[float] = None
+    transport_cost_pkr: Optional[float] = None
+    food_cost_sar: Optional[float] = None
+    food_cost_pkr: Optional[float] = None
+    ziyarat_cost_sar: Optional[float] = None
+    ziyarat_cost_pkr: Optional[float] = None
 
 class CustomBookingUpdate(BaseModel):
+    model_config = {"extra": "allow"}
     booking_status: Optional[str] = None
     voucher_status: Optional[str] = None
     payment_method: Optional[str] = None
@@ -87,9 +110,14 @@ class CustomBookingUpdate(BaseModel):
     passengers: Optional[List[CustomPassengerData]] = None
     rooms_selected: Optional[List[CustomRoomSelection]] = None
     shirka: Optional[str] = None
+    package_details: Optional[Dict[str, Any]] = None
     # ── Transport voucher — filled during order delivery ──
     transport_voucher_number: Optional[str] = None
     transport_brn: Optional[str] = None
+    food_voucher_number: Optional[str] = None
+    food_brn: Optional[str] = None
+    ziyarat_voucher_number: Optional[str] = None
+    ziyarat_brn: Optional[str] = None
 
 PASSPORT_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
@@ -177,9 +205,69 @@ async def create_custom_booking(
         flight_doc = await db_ops.get_by_id(Collections.FLIGHTS, flight_ref)
         if flight_doc:
             booking_dict['package_details']['flight'] = serialize_doc(flight_doc)
-            
+
+    # ── resolve transport ID → full transport doc ──
+    transport_ref = pkg_details.get('transport')
+    if isinstance(transport_ref, str) and transport_ref:
+        transport_doc = await db_ops.get_by_id(Collections.TRANSPORT, transport_ref)
+        if transport_doc:
+            transport_obj = serialize_doc(transport_doc)
+        else:
+            transport_obj = {'id': transport_ref}
+        transport_obj.setdefault('brn', None)
+        transport_obj.setdefault('voucher_no', None)
+        booking_dict['package_details']['transport'] = transport_obj
+    elif isinstance(transport_ref, dict):
+        booking_dict['package_details']['transport'].setdefault('brn', None)
+        booking_dict['package_details']['transport'].setdefault('voucher_no', None)
+
+    # ── resolve food ID → full food doc ──
+    food_ref = pkg_details.get('food') or pkg_details.get('fooding')
+    food_key = 'food' if 'food' in pkg_details else ('fooding' if 'fooding' in pkg_details else 'food')
+    if isinstance(food_ref, str) and food_ref:
+        food_doc = await db_ops.get_by_id(Collections.FOOD_PRICES, food_ref)
+        if food_doc:
+            food_obj = serialize_doc(food_doc)
+        else:
+            food_obj = {'id': food_ref}
+        food_obj.setdefault('brn', None)
+        food_obj.setdefault('voucher_no', None)
+        booking_dict['package_details'][food_key] = food_obj
+    elif isinstance(food_ref, dict):
+        booking_dict['package_details'][food_key].setdefault('brn', None)
+        booking_dict['package_details'][food_key].setdefault('voucher_no', None)
+
+    # ── resolve ziyarat ID → full ziyarat doc ──
+    ziyarat_ref = pkg_details.get('ziyarat') or pkg_details.get('ziarat')
+    ziyarat_key = 'ziyarat' if 'ziyarat' in pkg_details else ('ziarat' if 'ziarat' in pkg_details else 'ziyarat')
+    if isinstance(ziyarat_ref, str) and ziyarat_ref:
+        ziyarat_doc = await db_ops.get_by_id(Collections.ZIARAT_PRICES, ziyarat_ref)
+        if ziyarat_doc:
+            ziyarat_obj = serialize_doc(ziyarat_doc)
+        else:
+            ziyarat_obj = {'id': ziyarat_ref}
+        ziyarat_obj.setdefault('brn', None)
+        ziyarat_obj.setdefault('voucher_no', None)
+        booking_dict['package_details'][ziyarat_key] = ziyarat_obj
+    elif isinstance(ziyarat_ref, dict):
+        booking_dict['package_details'][ziyarat_key].setdefault('brn', None)
+        booking_dict['package_details'][ziyarat_key].setdefault('voucher_no', None)
+
+    # ── Initialize top-level voucher fields for order delivery ──
+    booking_dict['transport_brn'] = None
+    booking_dict['transport_voucher_number'] = None
+    booking_dict['food_brn'] = None
+    booking_dict['food_voucher_number'] = None
+    booking_dict['ziyarat_brn'] = None
+    booking_dict['ziyarat_voucher_number'] = None
+    booking_dict['hotel_brn'] = None
+    booking_dict['hotel_voucher_number'] = None
+    booking_dict['shirka'] = None
+    booking_dict['voucher_status'] = 'Draft'
+
     created = await db_ops.create(Collections.CUSTOM_BOOKINGS, booking_dict)
     return serialize_doc(created)
+
 
 
 @router.get("/")
@@ -263,12 +351,25 @@ async def update_custom_booking(
     current_user: dict = Depends(get_current_user)
 ):
     update_data = booking_update.model_dump(exclude_unset=True)
-    print(f"DEBUG: update_custom_booking update_data: {update_data}")
+    print(f"DEBUG: update_custom_booking update_data keys: {list(update_data.keys())}")
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
     booking = await db_ops.get_by_id(Collections.CUSTOM_BOOKINGS, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Custom booking not found")
+
+    # ── Expand package_details into dot-notation to do a deep merge ──
+    # This prevents $set from overwriting the entire package_details object.
+    pkg = update_data.pop('package_details', None)
+    if pkg and isinstance(pkg, dict):
+        for sub_key, sub_val in pkg.items():
+            # For nested objects (food, transport, ziyarat), expand further
+            if isinstance(sub_val, dict):
+                for inner_key, inner_val in sub_val.items():
+                    update_data[f'package_details.{sub_key}.{inner_key}'] = inner_val
+            else:
+                update_data[f'package_details.{sub_key}'] = sub_val
+
     updated = await db_ops.update(Collections.CUSTOM_BOOKINGS, booking_id, update_data)
     return serialize_doc(updated)
 

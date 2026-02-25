@@ -22,20 +22,16 @@ class DBOperations:
     async def get_by_id(collection_name: str, doc_id: str) -> Optional[Dict]:
         """Get a single document by ID"""
         collection = db_config.get_collection(collection_name)
-        try:
-            document = await collection.find_one({"_id": ObjectId(doc_id)})
-            return document
-        except Exception as e:
-            print(f"Error in get_by_id for {collection_name} with ID {doc_id}: {str(e)}")
-            return None
-    
+        document = await collection.find_one({"_id": ObjectId(doc_id)})
+        return document
+
     @staticmethod
     async def get_one(collection_name: str, filter_query: Dict) -> Optional[Dict]:
         """Get a single document by filter query"""
         collection = db_config.get_collection(collection_name)
         document = await collection.find_one(filter_query)
         return document
-    
+
     @staticmethod
     async def create(collection_name: str, document: Dict) -> Dict:
         """Create a new document"""
@@ -45,27 +41,19 @@ class DBOperations:
         result = await collection.insert_one(document)
         document["_id"] = result.inserted_id
         return document
-    
+
     @staticmethod
     async def update(collection_name: str, doc_id: str, update_data: Dict) -> Optional[Dict]:
         """Update a document by ID"""
         collection = db_config.get_collection(collection_name)
         update_data["updated_at"] = datetime.utcnow()
-        try:
-            with open("db_update_log.txt", "a") as f:
-                f.write(f"\n[{datetime.utcnow()}] Updating {collection_name} {doc_id} with {update_data}\n")
-            result = await collection.find_one_and_update(
-                {"_id": ObjectId(doc_id)},
-                {"$set": update_data},
-                return_document=True
-            )
-            return result
-        except Exception as e:
-            error_msg = f"Error in update for {collection_name} with ID {doc_id}: {str(e)}"
-            print(error_msg)
-            with open("db_update_log.txt", "a") as f:
-                f.write(f"\n[{datetime.utcnow()}] ERROR: {error_msg}\n")
-            return None
+        result = await collection.find_one_and_update(
+            {"_id": ObjectId(doc_id)},
+            {"$set": update_data},
+            return_document=True
+        )
+        return result
+
     
     @staticmethod
     async def delete(collection_name: str, doc_id: str) -> bool:
