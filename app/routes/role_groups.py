@@ -14,467 +14,183 @@ from app.utils.auth import get_current_user
 router = APIRouter(prefix="/role-groups", tags=["Role Groups"])
 
 # ---------------------------------------------------------------------------
-# Full Permission Catalogue
+# Enterprise RBAC Permission Catalogue
+# Organization → Branch → Agency → Employee Hierarchy
+# Each module supports: view, add, update, delete, all
 # ---------------------------------------------------------------------------
+
+def build_module_permissions(module_code, module_label):
+    """Build standardized CRUD permissions for a module"""
+    return [
+        {"code": f"{module_code}.view", "label": f"View {module_label}"},
+        {"code": f"{module_code}.add", "label": f"Add {module_label}"},
+        {"code": f"{module_code}.update", "label": f"Update {module_label}"},
+        {"code": f"{module_code}.delete", "label": f"Delete {module_label}"},
+        {"code": f"{module_code}.all", "label": f"Full Access to {module_label}"},
+    ]
+
 PERMISSION_CATALOGUE = [
+    # 🗂 INVENTORY MODULE
     {
-        "category": "Login Access", "icon": "??",
-        "permissions": [
-            {"code": "admin_portal_access", "label": "Can access admin portal"},
-        ],
-    },
-    {
-        "category": "Booking History", "icon": "??",
-        "permissions": [
-            {"code": "view_agent_bookings_admin",    "label": "Can view agent bookings"},
-            {"code": "view_booking_history_admin",   "label": "Can view booking history"},
-            {"code": "view_branch_bookings_admin",   "label": "Can view branch bookings"},
-            {"code": "view_employee_bookings_admin", "label": "Can view employee bookings"},
-            {"code": "view_org_bookings_admin",      "label": "Can view organization bookings"},
-        ],
-    },
-    {
-        "category": "Blogs", "icon": "??",
-        "permissions": [
-            {"code": "add_blog_admin",    "label": "Can add blogs"},
-            {"code": "delete_blog_admin", "label": "Can delete blogs"},
-            {"code": "edit_blog_admin",   "label": "Can edit blogs"},
-            {"code": "view_blog_admin",   "label": "Can view blogs"},
-        ],
-    },
-    {
-        "category": "CRM", "icon": "??",
+        "category": "Inventory",
+        "icon": "📦",
+        "description": "Manage stock items (Packages, Hotels, Tickets, Flights, Others)",
         "subcategories": [
-            {"label": "Leads", "icon": "??", "permissions": [
-                {"code": "add_leads_admin",  "label": "Can add leads"},
-                {"code": "edit_leads_admin", "label": "Can edit leads"},
-                {"code": "view_leads_admin", "label": "Can view leads"},
-            ]},
-            {"label": "Loan", "icon": "??", "permissions": [
-                {"code": "add_loan_admin",  "label": "Can add loan"},
-                {"code": "edit_loan_admin", "label": "Can edit loan"},
-                {"code": "view_loan_admin", "label": "Can view loan"},
-            ]},
-            {"label": "Tasks", "icon": "?", "permissions": [
-                {"code": "add_tasks_admin",  "label": "Can add tasks"},
-                {"code": "edit_tasks_admin", "label": "Can edit tasks"},
-                {"code": "view_tasks_admin", "label": "Can view tasks"},
-            ]},
-            {"label": "Closed Leads", "icon": "??", "permissions": [
-                {"code": "view_closed_leads_admin", "label": "Can view closed leads"},
-            ]},
-            {"label": "Instant", "icon": "?", "permissions": [
-                {"code": "view_instant_admin", "label": "Can view instant"},
-            ]},
-            {"label": "Passport Leads", "icon": "??", "permissions": [
-                {"code": "add_passport_leads_admin",    "label": "Can add passport leads"},
-                {"code": "delete_passport_leads_admin", "label": "Can delete passport leads"},
-                {"code": "edit_passport_leads_admin",   "label": "Can edit passport leads"},
-                {"code": "view_passport_leads_admin",   "label": "Can view passport leads"},
-            ]},
-            {"label": "Walking Customer", "icon": "??", "permissions": [
-                {"code": "add_walking_customer_admin",    "label": "Can add walking customer"},
-                {"code": "delete_walking_customer_admin", "label": "Can delete walking customer"},
-                {"code": "edit_walking_customer_admin",   "label": "Can edit walking customer"},
-                {"code": "view_walking_customer_admin",   "label": "Can view walking customer"},
-            ]},
-            {"label": "Customer Database", "icon": "??", "permissions": [
-                {"code": "add_customer_database_admin",    "label": "Can add customer database"},
-                {"code": "delete_customer_database_admin", "label": "Can delete customer database"},
-                {"code": "edit_customer_database_admin",   "label": "Can edit customer database"},
-                {"code": "view_customer_database_admin",   "label": "Can view customer database"},
-            ]},
+            {"label": "Packages", "permissions": build_module_permissions("inventory.packages", "Packages")},
+            {"label": "Hotels", "permissions": build_module_permissions("inventory.hotels", "Hotels")},
+            {"label": "Tickets", "permissions": build_module_permissions("inventory.tickets", "Tickets")},
+            {"label": "Flights", "permissions": build_module_permissions("inventory.flights", "Flights")},
+            {"label": "Others", "permissions": build_module_permissions("inventory.others", "Other Items")},
         ],
     },
+    
+    # 💰 PRICING MODULE
     {
-        "category": "Daily Operations", "icon": "??",
+        "category": "Pricing",
+        "icon": "💰",
+        "description": "Manage discounts, commissions, and service charges",
         "subcategories": [
-            {"label": "Hotel Check-in/Check-out", "icon": "??", "permissions": [
-                {"code": "update_hotel_checkin_admin", "label": "Can update hotel check-in/check-out"},
-                {"code": "view_hotel_checkin_admin",   "label": "Can view hotel check-in/check-out"},
-            ]},
-            {"label": "Ziyarat", "icon": "??", "permissions": [
-                {"code": "update_ziyarat_operations_admin", "label": "Can update ziyarat"},
-                {"code": "view_ziyarat_operations_admin",   "label": "Can view ziyarat"},
-            ]},
-            {"label": "Transport", "icon": "??", "permissions": [
-                {"code": "update_transport_operations_admin", "label": "Can update transport"},
-                {"code": "view_transport_operations_admin",   "label": "Can view transport"},
-            ]},
-            {"label": "Airport", "icon": "??", "permissions": [
-                {"code": "update_airport_operations_admin", "label": "Can update airport"},
-                {"code": "view_airport_operations_admin",   "label": "Can view airport"},
-            ]},
-            {"label": "Food", "icon": "???", "permissions": [
-                {"code": "update_food_operations_admin", "label": "Can update food"},
-                {"code": "view_food_operations_admin",   "label": "Can view food"},
-            ]},
-            {"label": "Pax Details", "icon": "??", "permissions": [
-                {"code": "update_pax_details_admin", "label": "Can update pax details"},
-                {"code": "view_pax_details_admin",   "label": "Can view pax details"},
-            ]},
+            {"label": "Discounts", "permissions": build_module_permissions("pricing.discounts", "Discounts")},
+            {"label": "Commissions", "permissions": build_module_permissions("pricing.commissions", "Commissions")},
+            {"label": "Service Charges", "permissions": build_module_permissions("pricing.service_charges", "Service Charges")},
         ],
     },
+    
+    # 📊 FINANCE MODULE
     {
-        "category": "Finance", "icon": "??",
+        "category": "Finance",
+        "icon": "📊",
+        "description": "Financial management & accounting",
         "subcategories": [
-            {"label": "Recent Transactions", "icon": "??", "permissions": [
-                {"code": "view_recent_transactions_admin", "label": "Can view recent transactions"},
+            {"label": "Dashboard", "permissions": [
+                {"code": "finance.dashboard.view", "label": "View Finance Dashboard"},
             ]},
-            {"label": "Profit & Loss Reports", "icon": "??", "permissions": [
-                {"code": "view_profit_loss_reports_admin", "label": "Can view profit & loss reports"},
+            {"label": "Chart of Accounts", "permissions": [
+                {"code": "finance.coa.view", "label": "View Chart of Accounts"},
+                {"code": "finance.coa.add", "label": "Add Chart of Accounts"},
             ]},
-            {"label": "Financial Ledger", "icon": "??", "permissions": [
-                {"code": "view_financial_ledger_admin", "label": "Can view financial ledger"},
+            {"label": "Journal Entries", "permissions": [
+                {"code": "finance.journals.view", "label": "View Journal Entries"},
             ]},
-            {"label": "Expense Management", "icon": "??", "permissions": [
-                {"code": "add_expense_management_admin",    "label": "Can add expense management"},
-                {"code": "delete_expense_management_admin", "label": "Can delete expense management"},
-                {"code": "edit_expense_management_admin",   "label": "Can edit expense management"},
-                {"code": "view_expense_management_admin",   "label": "Can view expense management"},
+            {"label": "Manual Posting", "permissions": [
+                {"code": "finance.manual_posting.view", "label": "View Manual Posting"},
+                {"code": "finance.manual_posting.add", "label": "Add Manual Posting"},
             ]},
-            {"label": "Manual Posting", "icon": "??", "permissions": [
-                {"code": "add_manual_posting_admin",    "label": "Can add manual posting"},
-                {"code": "delete_manual_posting_admin", "label": "Can delete manual posting"},
-                {"code": "edit_manual_posting_admin",   "label": "Can edit manual posting"},
-                {"code": "view_manual_posting_admin",   "label": "Can view manual posting"},
+            {"label": "Profit & Loss", "permissions": [
+                {"code": "finance.profit_loss.view", "label": "View Profit & Loss Reports"},
             ]},
-            {"label": "Tax Reports (FBR)", "icon": "???", "permissions": [
-                {"code": "view_tax_reports_fbr_admin", "label": "Can view tax reports (FBR)"},
+            {"label": "Balance Sheet", "permissions": [
+                {"code": "finance.balance_sheet.view", "label": "View Balance Sheet"},
             ]},
-            {"label": "Balance Sheet", "icon": "??", "permissions": [
-                {"code": "view_balance_sheet_admin", "label": "Can view balance sheet"},
+            {"label": "Trial Balance", "permissions": [
+                {"code": "finance.trial_balance.view", "label": "View Trial Balance"},
             ]},
-            {"label": "Audit Trail", "icon": "??", "permissions": [
-                {"code": "view_audit_trail_admin", "label": "Can view audit trail"},
+            {"label": "Ledger", "permissions": [
+                {"code": "finance.ledger.view", "label": "View Financial Ledger"},
+            ]},
+            {"label": "Audit Trail", "permissions": [
+                {"code": "finance.audit_trail.view", "label": "View Audit Trail"},
             ]},
         ],
     },
+    
+    # 💳 PAYMENTS MODULE
     {
-        "category": "Form Management", "icon": "??",
-        "permissions": [
-            {"code": "add_form_admin",    "label": "Can add forms"},
-            {"code": "delete_form_admin", "label": "Can delete forms"},
-            {"code": "edit_form_admin",   "label": "Can edit forms"},
-            {"code": "view_form_admin",   "label": "Can view forms"},
-        ],
-    },
-    {
-        "category": "Hotels", "icon": "??",
+        "category": "Payments",
+        "icon": "💳",
+        "description": "Payment processing & management",
         "subcategories": [
-            {"label": "Main Hotel Permissions", "icon": "??", "permissions": [
-                {"code": "add_hotel_admin",    "label": "Can add hotels"},
-                {"code": "delete_hotel_admin", "label": "Can delete hotels"},
-                {"code": "edit_hotel_admin",   "label": "Can edit hotels"},
-                {"code": "view_hotel_admin",   "label": "Can view hotels"},
-            ]},
-            {"label": "Hotel Availability", "icon": "??", "permissions": [
-                {"code": "add_availability_admin",    "label": "Can add hotel availability"},
-                {"code": "delete_availability_admin", "label": "Can delete hotel availability"},
-                {"code": "edit_availability_admin",   "label": "Can edit hotel availability"},
-                {"code": "view_availability_admin",   "label": "Can view hotel availability"},
-            ]},
-            {"label": "Hotel Outsourcing", "icon": "??", "permissions": [
-                {"code": "add_outsourcing_admin",    "label": "Can add hotel outsourcing"},
-                {"code": "delete_outsourcing_admin", "label": "Can delete hotel outsourcing"},
-                {"code": "edit_outsourcing_admin",   "label": "Can edit hotel outsourcing"},
-                {"code": "view_outsourcing_admin",   "label": "Can view hotel outsourcing"},
-            ]},
-            {"label": "Hotel Floor Management", "icon": "??", "permissions": [
-                {"code": "add_floor_management_admin",    "label": "Can add hotel floor management"},
-                {"code": "delete_floor_management_admin", "label": "Can delete hotel floor management"},
-                {"code": "edit_floor_management_admin",   "label": "Can edit hotel floor management"},
-                {"code": "view_floor_management_admin",   "label": "Can view hotel floor management"},
-            ]},
+            {"label": "Add Payment", "permissions": build_module_permissions("payments.add_payment", "Payment Creation")},
+            {"label": "Pending Payments", "permissions": build_module_permissions("payments.pending", "Pending Payments")},
+            {"label": "Vouchers", "permissions": build_module_permissions("payments.vouchers", "Payment Vouchers")},
+            {"label": "Bank Accounts", "permissions": build_module_permissions("payments.bank_accounts", "Bank Accounts")},
+            {"label": "Ledger", "permissions": build_module_permissions("payments.ledger", "Payment Ledger")},
+            {"label": "Booking History", "permissions": build_module_permissions("payments.booking_history", "Booking History")},
         ],
     },
+    
+    # 👥 CUSTOMERS MODULE
     {
-        "category": "HR", "icon": "??",
+        "category": "Customers",
+        "icon": "👥",
+        "description": "Customer relationship management",
         "subcategories": [
-            {"label": "Employees", "icon": "??", "permissions": [
-                {"code": "add_employees_admin",    "label": "Can add employees"},
-                {"code": "delete_employees_admin", "label": "Can delete employees"},
-                {"code": "edit_employees_admin",   "label": "Can edit employees"},
-                {"code": "view_employees_admin",   "label": "Can view employees"},
-            ]},
-            {"label": "Attendance", "icon": "??", "permissions": [
-                {"code": "add_attendance_admin",    "label": "Can add attendance"},
-                {"code": "delete_attendance_admin", "label": "Can delete attendance"},
-                {"code": "edit_attendance_admin",   "label": "Can edit attendance"},
-                {"code": "view_attendance_admin",   "label": "Can view attendance"},
-            ]},
-            {"label": "Movements", "icon": "??", "permissions": [
-                {"code": "add_movements_admin",    "label": "Can add movements"},
-                {"code": "delete_movements_admin", "label": "Can delete movements"},
-                {"code": "edit_movements_admin",   "label": "Can edit movements"},
-                {"code": "view_movements_admin",   "label": "Can view movements"},
-            ]},
-            {"label": "Commission", "icon": "??", "permissions": [
-                {"code": "add_hr_commission_admin",    "label": "Can add commission"},
-                {"code": "delete_hr_commission_admin", "label": "Can delete commission"},
-                {"code": "edit_hr_commission_admin",   "label": "Can edit commission"},
-                {"code": "view_hr_commission_admin",   "label": "Can view commission"},
-            ]},
-            {"label": "Punctuality", "icon": "?", "permissions": [
-                {"code": "add_punctuality_admin",    "label": "Can add punctuality"},
-                {"code": "delete_punctuality_admin", "label": "Can delete punctuality"},
-                {"code": "edit_punctuality_admin",   "label": "Can edit punctuality"},
-                {"code": "view_punctuality_admin",   "label": "Can view punctuality"},
-            ]},
-            {"label": "Approvals", "icon": "?", "permissions": [
-                {"code": "add_approvals_admin",    "label": "Can add approvals"},
-                {"code": "delete_approvals_admin", "label": "Can delete approvals"},
-                {"code": "edit_approvals_admin",   "label": "Can edit approvals"},
-                {"code": "view_approvals_admin",   "label": "Can view approvals"},
-            ]},
-            {"label": "Payments", "icon": "??", "permissions": [
-                {"code": "add_hr_payments_admin",    "label": "Can add HR payments"},
-                {"code": "delete_hr_payments_admin", "label": "Can delete HR payments"},
-                {"code": "edit_hr_payments_admin",   "label": "Can edit HR payments"},
-                {"code": "view_hr_payments_admin",   "label": "Can view HR payments"},
-            ]},
+            {"label": "Customers", "permissions": build_module_permissions("customers.customers", "Customers")},
+            {"label": "Leads", "permissions": build_module_permissions("customers.leads", "Leads")},
+            {"label": "Passport Leads", "permissions": build_module_permissions("customers.passport_leads", "Passport Leads")},
         ],
     },
+    
+    # 🧑‍💼 HR MODULE
     {
-        "category": "Order Delivery", "icon": "??",
-        "permissions": [
-            {"code": "update_order_delivery_admin", "label": "Can update order delivery"},
-            {"code": "view_order_delivery_admin",   "label": "Can view order delivery"},
-        ],
-    },
-    {
-        "category": "Packages", "icon": "??",
-        "permissions": [
-            {"code": "add_package_admin",    "label": "Can add packages"},
-            {"code": "delete_package_admin", "label": "Can delete packages"},
-            {"code": "edit_package_admin",   "label": "Can edit packages"},
-            {"code": "view_package_admin",   "label": "Can view packages"},
-        ],
-    },
-    {
-        "category": "Partners", "icon": "??",
+        "category": "HR",
+        "icon": "🧑‍💼",
+        "description": "Human resources management",
         "subcategories": [
-            {"label": "Add Users", "icon": "??", "permissions": [
-                {"code": "assign_agency_admin",       "label": "Can assign agency"},
-                {"code": "assign_branches_admin",     "label": "Can assign branches"},
-                {"code": "assign_groups_admin",       "label": "Can assign groups"},
-                {"code": "assign_organization_admin", "label": "Can assign organization"},
-                {"code": "view_add_users_admin",      "label": "Can view add users"},
-                {"code": "view_users_admin",          "label": "Can view users"},
-            ]},
-            {"label": "Organization", "icon": "??", "permissions": [
-                {"code": "add_organization_admin",    "label": "Can add organization"},
-                {"code": "delete_organization_admin", "label": "Can delete organization"},
-                {"code": "edit_organization_admin",   "label": "Can edit organization"},
-                {"code": "view_organization_admin",   "label": "Can view organization"},
-            ]},
-            {"label": "Groups", "icon": "??", "permissions": [
-                {"code": "add_groups_admin",                   "label": "Can add groups"},
-                {"code": "assign_permissions_to_groups_admin", "label": "Can assign permissions to groups"},
-                {"code": "delete_groups_admin",                "label": "Can delete groups"},
-                {"code": "edit_groups_admin",                  "label": "Can edit groups"},
-                {"code": "view_groups_admin",                  "label": "Can view groups"},
-            ]},
-            {"label": "Agency", "icon": "???", "permissions": [
-                {"code": "add_agency_admin",    "label": "Can add agency"},
-                {"code": "delete_agency_admin", "label": "Can delete agency"},
-                {"code": "edit_agency_admin",   "label": "Can edit agency"},
-                {"code": "view_agency_admin",   "label": "Can view agency"},
-            ]},
-            {"label": "Branch", "icon": "??", "permissions": [
-                {"code": "add_branch_admin",    "label": "Can add branch"},
-                {"code": "delete_branch_admin", "label": "Can delete branch"},
-                {"code": "edit_branch_admin",   "label": "Can edit branch"},
-                {"code": "view_branch_admin",   "label": "Can view branch"},
-            ]},
-            {"label": "Discount", "icon": "??", "permissions": [
-                {"code": "add_discount_groups_admin",                  "label": "Can add discount groups"},
-                {"code": "assign_commission_to_discount_groups_admin", "label": "Can assign commission to discount groups"},
-                {"code": "delete_discount_groups_admin",               "label": "Can delete discount groups"},
-                {"code": "edit_discount_groups_admin",                 "label": "Can edit discount groups"},
-                {"code": "view_discount_groups_admin",                 "label": "Can view discount groups"},
-            ]},
-            {"label": "Org Links", "icon": "??", "permissions": [
-                {"code": "add_create_link_org_admin",         "label": "Can create link org"},
-                {"code": "add_create_resell_request_admin",   "label": "Can create resell request"},
-                {"code": "delete_create_link_org_admin",      "label": "Can delete link org"},
-                {"code": "delete_create_resell_request_admin","label": "Can delete resell request"},
-                {"code": "edit_create_link_org_admin",        "label": "Can edit link org"},
-                {"code": "edit_create_resell_request_admin",  "label": "Can edit resell request"},
-                {"code": "view_create_link_org_admin",        "label": "Can view link org"},
-                {"code": "view_create_resell_request_admin",  "label": "Can view resell request"},
-            ]},
-            {"label": "Markup Rules", "icon": "??", "permissions": [
-                {"code": "add_markup_add_group_admin",       "label": "Can add markup group"},
-                {"code": "add_markup_assign_value_admin",    "label": "Can assign markup value"},
-                {"code": "delete_markup_add_group_admin",    "label": "Can delete markup group"},
-                {"code": "delete_markup_assign_value_admin", "label": "Can delete markup value"},
-                {"code": "edit_markup_add_group_admin",      "label": "Can edit markup group"},
-                {"code": "edit_markup_assign_value_admin",   "label": "Can edit markup value"},
-                {"code": "view_markup_add_group_admin",      "label": "Can view markup group"},
-                {"code": "view_markup_assign_value_admin",   "label": "Can view markup value"},
-            ]},
-            {"label": "Commission Rules", "icon": "??", "permissions": [
-                {"code": "add_commission_add_group_admin",       "label": "Can add commission group"},
-                {"code": "add_commission_assign_value_admin",    "label": "Can assign commission value"},
-                {"code": "delete_commission_add_group_admin",    "label": "Can delete commission group"},
-                {"code": "delete_commission_assign_value_admin", "label": "Can delete commission value"},
-                {"code": "edit_commission_add_group_admin",      "label": "Can edit commission group"},
-                {"code": "edit_commission_assign_value_admin",   "label": "Can edit commission value"},
-                {"code": "view_commission_add_group_admin",      "label": "Can view commission group"},
-                {"code": "view_commission_assign_value_admin",   "label": "Can view commission value"},
-            ]},
-            {"label": "Super Admin", "icon": "??", "permissions": [
-                {"code": "add_super_admin_admin",    "label": "Can add super admin"},
-                {"code": "delete_super_admin_admin", "label": "Can delete super admin"},
-                {"code": "edit_super_admin_admin",   "label": "Can edit super admin"},
-            ]},
-            {"label": "Admin", "icon": "??", "permissions": [
-                {"code": "add_admin_admin",    "label": "Can add admin"},
-                {"code": "delete_admin_admin", "label": "Can delete admin"},
-                {"code": "edit_admin_admin",   "label": "Can edit admin"},
-            ]},
-            {"label": "Agent", "icon": "??", "permissions": [
-                {"code": "add_agent_admin",    "label": "Can add agent"},
-                {"code": "delete_agent_admin", "label": "Can delete agent"},
-                {"code": "edit_agent_admin",   "label": "Can edit agent"},
-            ]},
-            {"label": "Area Agent", "icon": "??", "permissions": [
-                {"code": "add_area_agent_admin",    "label": "Can add area agent"},
-                {"code": "delete_area_agent_admin", "label": "Can delete area agent"},
-                {"code": "edit_area_agent_admin",   "label": "Can edit area agent"},
-            ]},
-            {"label": "Employee", "icon": "?????", "permissions": [
-                {"code": "add_employee_admin",    "label": "Can add employee"},
-                {"code": "delete_employee_admin", "label": "Can delete employee"},
-                {"code": "edit_employee_admin",   "label": "Can edit employee"},
-            ]},
-            {"label": "Branch Users", "icon": "???????????", "permissions": [
-                {"code": "add_branch_users_admin",    "label": "Can add branch users"},
-                {"code": "delete_branch_users_admin", "label": "Can delete branch users"},
-                {"code": "edit_branch_users_admin",   "label": "Can edit branch users"},
-            ]},
+            {"label": "Employees", "permissions": build_module_permissions("hr.employees", "HR Employees")},
+            {"label": "Attendance", "permissions": build_module_permissions("hr.attendance", "Attendance")},
+            {"label": "Movements", "permissions": build_module_permissions("hr.movements", "Movements")},
+            {"label": "Commissions", "permissions": build_module_permissions("hr.commissions", "HR Commissions")},
+            {"label": "Punctuality", "permissions": build_module_permissions("hr.punctuality", "Punctuality")},
+            {"label": "Approvals", "permissions": build_module_permissions("hr.approvals", "Approvals")},
         ],
     },
+    
+    # 🏢 ENTITIES MODULE
     {
-        "category": "Pax Movement & Intimation", "icon": "??",
+        "category": "Entities",
+        "icon": "🏢",
+        "description": "Organizational structure management",
         "subcategories": [
-            {"label": "All Passengers", "icon": "??", "permissions": [
-                {"code": "view_pax_all_passengers_admin", "label": "Can view all passengers"},
-            ]},
+            {"label": "Organization", "permissions": build_module_permissions("entities.organization", "Organization")},
+            {"label": "Branch", "permissions": build_module_permissions("entities.branch", "Branch")},
+            {"label": "Agencies", "permissions": build_module_permissions("entities.agencies", "Agencies")},
+            {"label": "Roles & Permissions", "permissions": build_module_permissions("entities.roles_permissions", "Roles & Permissions")},
+            {"label": "Employees", "permissions": build_module_permissions("entities.employees", "Entity Employees")},
         ],
     },
+    
+    # 📝 SINGLE MODULES (Independent)
     {
-        "category": "Payments", "icon": "??",
+        "category": "Content & Operations",
+        "icon": "📝",
+        "description": "Independent operational modules",
         "subcategories": [
-            {"label": "Ledger", "icon": "??", "permissions": [
-                {"code": "view_ledger_admin", "label": "Can view ledger"},
-            ]},
-            {"label": "Payments", "icon": "??", "permissions": [
-                {"code": "add_payments_finance_admin", "label": "Can add payments"},
-                {"code": "approve_payments_admin",     "label": "Can approve payments"},
-                {"code": "reject_payments_admin",      "label": "Can reject payments"},
-            ]},
-            {"label": "Bank Account", "icon": "??", "permissions": [
-                {"code": "add_bank_account_admin",    "label": "Can add bank account"},
-                {"code": "delete_bank_account_admin", "label": "Can delete bank account"},
-                {"code": "edit_bank_account_admin",   "label": "Can edit bank account"},
-                {"code": "view_bank_account_admin",   "label": "Can view bank account"},
-            ]},
-            {"label": "Pending Payments", "icon": "?", "permissions": [
-                {"code": "add_remarks_pending_payments_admin", "label": "Can add remarks to pending payments"},
-                {"code": "view_pending_payments_admin",        "label": "Can view pending payments"},
-            ]},
+            {"label": "Blogs", "permissions": build_module_permissions("content.blogs", "Blogs")},
+            {"label": "Forms", "permissions": build_module_permissions("content.forms", "Forms")},
+            {"label": "Pax Movement", "permissions": build_module_permissions("operations.pax_movement", "Pax Movement")},
+            {"label": "Daily Operations", "permissions": build_module_permissions("operations.daily", "Daily Operations")},
+            {"label": "Order Delivery", "permissions": build_module_permissions("operations.order_delivery", "Order Delivery")},
         ],
     },
+    
+    # 🏪 AGENCY MODULES (For Agency Portal)
     {
-        "category": "Rules Management", "icon": "??",
-        "permissions": [
-            {"code": "add_rule_admin",    "label": "Can add rules"},
-            {"code": "delete_rule_admin", "label": "Can delete rules"},
-            {"code": "edit_rule_admin",   "label": "Can edit rules"},
-            {"code": "view_rule_admin",   "label": "Can view rules"},
-        ],
-    },
-    {
-        "category": "Tickets", "icon": "??",
-        "permissions": [
-            {"code": "add_ticket_admin",    "label": "Can add tickets"},
-            {"code": "delete_ticket_admin", "label": "Can delete tickets"},
-            {"code": "edit_ticket_admin",   "label": "Can edit tickets"},
-            {"code": "view_ticket_admin",   "label": "Can view tickets"},
-        ],
-    },
-    {
-        "category": "Visa and Other Permissions", "icon": "??",
+        "category": "Agency",
+        "icon": "🏪",
+        "description": "Agency-specific modules (controlled by Organization)",
         "subcategories": [
-            {"label": "Riyal Rate", "icon": "??", "permissions": [
-                {"code": "edit_riyal_rate_admin", "label": "Can edit riyal rate"},
-            ]},
-            {"label": "Shirka", "icon": "??", "permissions": [
-                {"code": "add_shirka_admin",    "label": "Can add shirka"},
-                {"code": "delete_shirka_admin", "label": "Can delete shirka"},
-                {"code": "edit_shirka_admin",   "label": "Can edit shirka"},
-            ]},
-            {"label": "Sector", "icon": "??", "permissions": [
-                {"code": "add_sector_admin",    "label": "Can add sector"},
-                {"code": "delete_sector_admin", "label": "Can delete sector"},
-                {"code": "edit_sector_admin",   "label": "Can edit sector"},
-            ]},
-            {"label": "Big Sector", "icon": "???", "permissions": [
-                {"code": "add_big_sector_admin",    "label": "Can add big sector"},
-                {"code": "delete_big_sector_admin", "label": "Can delete big sector"},
-                {"code": "edit_big_sector_admin",   "label": "Can edit big sector"},
-            ]},
-            {"label": "Visa and Transport Rate", "icon": "??", "permissions": [
-                {"code": "add_visa_transport_rate_admin",    "label": "Can add visa and transport rate"},
-                {"code": "delete_visa_transport_rate_admin", "label": "Can delete visa and transport rate"},
-                {"code": "edit_visa_transport_rate_admin",   "label": "Can edit visa and transport rate"},
-            ]},
-            {"label": "Only Visa Rates", "icon": "??", "permissions": [
-                {"code": "edit_long_term_visa_rate_admin", "label": "Can edit long term visa rate"},
-                {"code": "edit_only_visa_rate_admin",      "label": "Can edit only visa rate"},
-            ]},
-            {"label": "Transport Prices", "icon": "??", "permissions": [
-                {"code": "add_transport_price_admin",    "label": "Can add transport price"},
-                {"code": "delete_transport_price_admin", "label": "Can delete transport price"},
-                {"code": "edit_transport_price_admin",   "label": "Can edit transport price"},
-            ]},
-            {"label": "Food Prices", "icon": "???", "permissions": [
-                {"code": "add_food_price_admin",    "label": "Can add food price"},
-                {"code": "delete_food_price_admin", "label": "Can delete food price"},
-                {"code": "edit_food_price_admin",   "label": "Can edit food price"},
-            ]},
-            {"label": "Ziarat Prices", "icon": "??", "permissions": [
-                {"code": "add_ziarat_price_admin",    "label": "Can add ziarat price"},
-                {"code": "delete_ziarat_price_admin", "label": "Can delete ziarat price"},
-                {"code": "edit_ziarat_price_admin",   "label": "Can edit ziarat price"},
-            ]},
-            {"label": "Flight", "icon": "??", "permissions": [
-                {"code": "add_flight_admin",    "label": "Can add flight"},
-                {"code": "delete_flight_admin", "label": "Can delete flight"},
-                {"code": "edit_flight_admin",   "label": "Can edit flight"},
-            ]},
-            {"label": "City", "icon": "???", "permissions": [
-                {"code": "add_city_admin",    "label": "Can add city"},
-                {"code": "delete_city_admin", "label": "Can delete city"},
-                {"code": "edit_city_admin",   "label": "Can edit city"},
-            ]},
-            {"label": "Booking Settings", "icon": "??", "permissions": [
-                {"code": "edit_booking_expire_time_admin", "label": "Can set time for booking expire"},
-            ]},
+            {"label": "Dashboard", "permissions": build_module_permissions("agency.dashboard", "Agency Dashboard")},
+            {"label": "Bookings", "permissions": build_module_permissions("agency.bookings", "Agency Bookings")},
+            {"label": "Custom Umrah", "permissions": build_module_permissions("agency.custom_umrah", "Custom Umrah")},
+            {"label": "Umrah Package", "permissions": build_module_permissions("agency.umrah_package", "Umrah Package")},
+            {"label": "Ticket", "permissions": build_module_permissions("agency.ticket", "Agency Ticket")},
+            {"label": "Flight Search", "permissions": build_module_permissions("agency.flight_search", "Flight Search")},
+            {"label": "Hotels", "permissions": build_module_permissions("agency.hotels", "Agency Hotels")},
+            {"label": "Payments", "permissions": build_module_permissions("agency.payments", "Agency Payments")},
+            {"label": "Booking History", "permissions": build_module_permissions("agency.booking_history", "Agency Booking History")},
         ],
     },
 ]
 
-# Flat set of all valid permission codes for validation
+# Flatten all permission codes for validation
 ALL_CODES: set = set()
-for _cat in PERMISSION_CATALOGUE:
-    for _p in _cat.get("permissions", []):
-        ALL_CODES.add(_p["code"])
-    for _sub in _cat.get("subcategories", []):
-        for _p in _sub.get("permissions", []):
-            ALL_CODES.add(_p["code"])
+for category in PERMISSION_CATALOGUE:
+    for perm in category.get("permissions", []):
+        ALL_CODES.add(perm["code"])
+    for sub in category.get("subcategories", []):
+        for perm in sub.get("permissions", []):
+            ALL_CODES.add(perm["code"])
 
 
 # ---------------------------------------------------------------------------

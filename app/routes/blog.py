@@ -1,9 +1,12 @@
 """
 Blog routes - CRUD operations and preview support
 """
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from typing import List
 import uuid
+import os
+import shutil
+from app.config.settings import settings
 from app.models.blog import BlogCreate, BlogUpdate, BlogResponse
 from app.database.db_operations import db_ops
 from app.config.database import Collections
@@ -65,6 +68,31 @@ async def get_blog_preview(
             detail="Blog not found"
         )
     return serialize_doc(blog)
+
+# ─── Public Endpoints (No Auth Required) ──────────────────────────────────────
+
+@router.get("/public/list", response_model=List[BlogResponse])
+async def get_public_blogs(skip: int = 0, limit: int = 20):
+    """Get all published blogs for the public portal."""
+    filter_query = {"status": "published"}
+    blogs = await db_ops.get_all(Collections.BLOGS, filter_query, skip, limit)
+    # Sort by published_at descending
+    blogs.sort(key=lambda x: x.get("published_at", ""), reverse=True)
+    return serialize_docs(blogs)
+
+@router.get("/public/post/{slug}", response_model=BlogResponse)
+async def get_public_blog_by_slug(slug: str):
+    """Get a specific published blog by its slug."""
+    blog = await db_ops.get_one(Collections.BLOGS, {"slug": slug, "status": "published"})
+    if not blog:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Blog not found or not published"
+        )
+    return serialize_doc(blog)
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 
 @router.get("/{blog_id}", response_model=BlogResponse)
 async def get_blog(
@@ -149,3 +177,39 @@ async def delete_blog(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Blog not found"
         )
+
+# ─── Media Upload ────────────────────────────────────────────────────────────
+
+@router.post("/upload-media", status_code=status.HTTP_201_CREATED)
+async def upload_blog_media(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload media file for blogs (thumbnails, inline images, galleries)"""
+    allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPEG, PNG, GIF, and WEBP are allowed.")
+
+    # Create uploads/blogs directory if it doesn't exist
+    upload_dir = os.path.join(settings.UPLOAD_DIR, "blogs")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    # Generate unique filename
+    ext = os.path.splitext(file.filename)[1].lower()
+    if not ext:
+        ext = ".jpg" if file.content_type == "image/jpeg" else ".png"
+    
+    unique_filename = f"{uuid.uuid4().hex}{ext}"
+    file_path = os.path.join(upload_dir, unique_filename)
+
+    # Save file
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Could not upload file: {str(e)}")
+    
+    # Return the full accessible URL
+    # Note: Hardcoding the domain for local dev, in production use proper base URL
+    file_url = f"http://localhost:8000/uploads/blogs/{unique_filename}"
+    return {"url": file_url}

@@ -42,3 +42,77 @@
 [2026-02-24 22:27:48.322768] Updating operations 699e2021fe819b73de8f1091 with {'status': 'checked_in', 'updated_at': datetime.datetime(2026, 2, 24, 22, 27, 48, 322417), 'checked_in_at': datetime.datetime(2026, 2, 24, 22, 27, 48, 322382)}
 
 [2026-02-24 22:30:10.734957] Updating operations 699e2021fe819b73de8f1091 with {'status': 'checked_out', 'updated_at': datetime.datetime(2026, 2, 24, 22, 30, 10, 734664), 'checked_out_at': datetime.datetime(2026, 2, 24, 22, 30, 10, 734626)}
+
+[2026-02-25 21:12:31.025987] Updating employees 699a2404c592bdf4d29edd0f with {'name': 'Abdul Rafay', 'email': 'abdulrafay@gmail.com', 'phone': '+3132858290', 'role': 'ORGANIZATION_EMPLOYEE', 'is_active': True, 'portal_access_enabled': True, 'username': 'abdulrafay@gmail.com', 'permissions': ['crm', 'employees'], 'group_id': '699f65b4bc5d5ba540ad1ce7', 'hashed_password': '$2b$12$uOS4sTQ55Zi12YEQh6n5T./l.EFGet26dAUxH.PqH4t/QL3EO0qMq', 'updated_at': datetime.datetime(2026, 2, 25, 21, 12, 31, 25035)}
+
+[2026-02-25 21:29:19.912193] Updating role_groups 699f65b4bc5d5ba540ad1ce7 with {'name': 'employes', 'description': '', 'permissions': ['inventory.packages.view', 'customers.customers.view', 'customers.leads.view', 'customers.passport_leads.view', 'hr.employees.view', 'hr.attendance.view', 'hr.movements.view', 'hr.commissions.view', 'hr.punctuality.view', 'hr.approvals.view'], 'updated_at': datetime.datetime(2026, 2, 25, 21, 29, 19, 911201)}
+
+[2026-02-25 21:29:44.144008] Updating leads 699cc027c281ed9752ee40f2 with {'lead_status': 'new', 'next_followup_date': '2026-02-24', 'next_followup_time': '00:37', 'updated_at': datetime.datetime(2026, 2, 25, 21, 29, 44, 144008)}
+
+[2026-02-25 21:29:44.164485] Updating leads 699cc027c281ed9752ee40f2 with {'chat_remarks': [{'text': 'helo', 'author_name': 'Abdul Rafay', 'author_type': 'employee', 'entity_type': 'employee', 'entity_name': 'ORGANIZATION_EMPLOYEE', 'created_at': '2026-02-24T21:47:35.183608'}, {'text': 'adw', 'author_name': 'Abdul Rafay', 'author_type': 'employee', 'entity_type': 'employee', 'entity_name': 'ORGANIZATION_EMPLOYEE', 'created_at': '2026-02-25T21:29:44.164485'}], 'updated_at': datetime.datetime(2026, 2, 25, 21, 29, 44, 164485)}
+
+[2026-02-25 21:33:28.774440] Updating leads 699cbdc2dd6a05991227ca96 with {'loan_amount': 10000.0, 'recovered_amount': 0.0, 'loan_promise_date': '2026-02-26', 'loan_status': 'pending', 'remarks': 'ge', 'updated_at': datetime.datetime(2026, 2, 25, 21, 33, 28, 773391)}
+
+[2026-02-25 21:38:31.973785] Updating role_groups 699f65b4bc5d5ba540ad1ce7 with {'name': 'employes', 'description': '', 'permissions': ['inventory.packages.view', 'inventory.packages.add', 'inventory.packages.update', 'inventory.packages.delete', 'inventory.packages.all', 'customers.customers.view', 'customers.leads.view', 'customers.passport_leads.view', 'hr.employees.view', 'hr.attendance.view', 'hr.movements.view', 'hr.commissions.view', 'hr.punctuality.view', 'hr.approvals.view'], 'updated_at': datetime.datetime(2026, 2, 25, 21, 38, 31, 973272)}
+
+[2026-02-25 21:45:02.548898] Updating role_groups 699f65b4bc5d5ba540ad1ce7 with {'name': 'employes', 'description': '', 'permissions': ['inventory.packages.view', 'inventory.packages.add', 'inventory.packages.update', 'inventory.packages.delete', 'inventory.packages.all', 'inventory.hotels.view', 'inventory.hotels.add', 'inventory.hotels.update', 'inventory.hotels.delete', 'inventory.hotels.all', 'inventory.tickets.view', 'inventory.tickets.add', 'inventory.tickets.update', 'inventory.tickets.delete', 'inventory.tickets.all', 'inventory.flights.view', 'inventory.flights.add', 'inventory.flights.update', 'inventory.flights.delete', 'inventory.flights.all', 'inventory.others.view', 'inventory.others.add', 'inventory.others.update', 'inventory.others.delete', 'inventory.others.all', 'customers.customers.view', 'customers.leads.view', 'customers.passport_leads.view', 'hr.employees.view', 'hr.attendance.view', 'hr.movements.view', 'hr.commissions.view', 'hr.punctuality.view', 'hr.approvals.view'], 'updated_at': datetime.datetime(2026, 2, 25, 21, 45, 2, 548898)}
+
+[2026-02-25 22:08:59.295502] Updating role_groups 699f65b4bc5d5ba540ad1ce7 with {'name': 'employes', 'description': '', 'permissions': ['inventory.packages.view', 'inventory.packages.add', 'inventory.packages.update', 'inventory.packages.delete', 'inventory.packages.all', 'inventory.hotels.view', 'inventory.hotels.add', 'inventory.hotels.update', 'inventory.hotels.delete', 'inventory.hotels.all', 'inventory.tickets.view', 'inventory.tickets.add', 'inventory.tickets.update', 'inventory.tickets.delete', 'inventory.tickets.all', 'inventory.flights.view', 'inventory.flights.add', 'inventory.flights.update', 'inventory.flights.delete', 'inventory.flights.all', 'inventory.others.view', 'inventory.others.add', 'inventory.others.update', 'inventory.others.delete', 'inventory.others.all', 'pricing.discounts.view', 'pricing.commissions.view', 'pricing.service_charges.view', 'customers.customers.view', 'customers.leads.view', 'customers.passport_leads.view', 'hr.employees.view', 'hr.attendance.view', 'hr.movements.view', 'hr.commissions.view', 'hr.punctuality.view', 'hr.approvals.view'], 'updated_at': datetime.datetime(2026, 2, 25, 22, 8, 59, 295502)}
+
+[2026-02-25 22:11:57.372148] Updating role_groups 699f65b4bc5d5ba540ad1ce7 with {'name': 'employes', 'description': '', 'permissions': ['inventory.packages.view', 'inventory.packages.add', 'inventory.packages.update', 'inventory.packages.delete', 'inventory.packages.all', 'inventory.hotels.view', 'inventory.hotels.add', 'inventory.hotels.update', 'inventory.hotels.delete', 'inventory.hotels.all', 'inventory.tickets.view', 'inventory.tickets.add', 'inventory.tickets.update', 'inventory.tickets.delete', 'inventory.tickets.all', 'inventory.flights.view', 'inventory.flights.add', 'inventory.flights.update', 'inventory.flights.delete', 'inventory.flights.all', 'inventory.others.view', 'inventory.others.add', 'inventory.others.update', 'inventory.others.delete', 'inventory.others.all', 'pricing.discounts.view', 'pricing.discounts.add', 'pricing.discounts.update', 'pricing.discounts.delete', 'pricing.discounts.all', 'pricing.commissions.view', 'pricing.commissions.add', 'pricing.commissions.update', 'pricing.commissions.delete', 'pricing.commissions.all', 'pricing.service_charges.view', 'pricing.service_charges.add', 'pricing.service_charges.update', 'pricing.service_charges.delete', 'pricing.service_charges.all', 'customers.customers.view', 'customers.leads.view', 'customers.passport_leads.view', 'hr.employees.view', 'hr.attendance.view', 'hr.movements.view', 'hr.commissions.view', 'hr.punctuality.view', 'hr.approvals.view'], 'updated_at': datetime.datetime(2026, 2, 25, 22, 11, 57, 371395)}
+
+[2026-02-26 01:47:35.250839] Updating blogs undefined with {'title': 'test', 'blocks': [{'id': '23efe07a-bf42-4fd3-9277-9e260a5b08d2', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Heading Text', 'level': 1}, 'styles': {}}, {'id': 'd6dd5962-64a8-4b6a-8494-96b74384e623', 'type': <BlockType.PARAGRAPH: 'paragraph'>, 'order': 1, 'content': {'text': 'Paragraph text goes here...sdffdsaf'}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 47, 35, 250839)}
+
+[2026-02-26 01:47:35.261538] ERROR: Error in update for blogs with ID undefined: 'undefined' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
+
+[2026-02-26 01:47:36.118252] Updating blogs undefined with {'title': 'test', 'blocks': [{'id': '23efe07a-bf42-4fd3-9277-9e260a5b08d2', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Heading Text', 'level': 1}, 'styles': {}}, {'id': 'd6dd5962-64a8-4b6a-8494-96b74384e623', 'type': <BlockType.PARAGRAPH: 'paragraph'>, 'order': 1, 'content': {'text': 'Paragraph text goes here...sdffdsaf'}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 47, 36, 118252)}
+
+[2026-02-26 01:47:36.119299] ERROR: Error in update for blogs with ID undefined: 'undefined' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
+
+[2026-02-26 01:47:36.286408] Updating blogs undefined with {'title': 'test', 'blocks': [{'id': '23efe07a-bf42-4fd3-9277-9e260a5b08d2', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Heading Text', 'level': 1}, 'styles': {}}, {'id': 'd6dd5962-64a8-4b6a-8494-96b74384e623', 'type': <BlockType.PARAGRAPH: 'paragraph'>, 'order': 1, 'content': {'text': 'Paragraph text goes here...sdffdsaf'}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 47, 36, 285409)}
+
+[2026-02-26 01:47:36.286408] ERROR: Error in update for blogs with ID undefined: 'undefined' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
+
+[2026-02-26 01:47:36.462962] Updating blogs undefined with {'title': 'test', 'blocks': [{'id': '23efe07a-bf42-4fd3-9277-9e260a5b08d2', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Heading Text', 'level': 1}, 'styles': {}}, {'id': 'd6dd5962-64a8-4b6a-8494-96b74384e623', 'type': <BlockType.PARAGRAPH: 'paragraph'>, 'order': 1, 'content': {'text': 'Paragraph text goes here...sdffdsaf'}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 47, 36, 461997)}
+
+[2026-02-26 01:47:36.462962] ERROR: Error in update for blogs with ID undefined: 'undefined' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
+
+[2026-02-26 01:47:36.638041] Updating blogs undefined with {'title': 'test', 'blocks': [{'id': '23efe07a-bf42-4fd3-9277-9e260a5b08d2', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Heading Text', 'level': 1}, 'styles': {}}, {'id': 'd6dd5962-64a8-4b6a-8494-96b74384e623', 'type': <BlockType.PARAGRAPH: 'paragraph'>, 'order': 1, 'content': {'text': 'Paragraph text goes here...sdffdsaf'}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 47, 36, 638041)}
+
+[2026-02-26 01:47:36.638041] ERROR: Error in update for blogs with ID undefined: 'undefined' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
+
+[2026-02-26 01:47:36.806259] Updating blogs undefined with {'title': 'test', 'blocks': [{'id': '23efe07a-bf42-4fd3-9277-9e260a5b08d2', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Heading Text', 'level': 1}, 'styles': {}}, {'id': 'd6dd5962-64a8-4b6a-8494-96b74384e623', 'type': <BlockType.PARAGRAPH: 'paragraph'>, 'order': 1, 'content': {'text': 'Paragraph text goes here...sdffdsaf'}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 47, 36, 806259)}
+
+[2026-02-26 01:47:36.806826] ERROR: Error in update for blogs with ID undefined: 'undefined' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
+
+[2026-02-26 01:49:10.903249] Updating blogs undefined with {'title': 'test', 'blocks': [{'id': '1772070533482-quqtx78ro', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Umrah packge', 'level': 1}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 49, 10, 902239)}
+
+[2026-02-26 01:49:10.903249] ERROR: Error in update for blogs with ID undefined: 'undefined' is not a valid ObjectId, it must be a 12-byte input or a 24-character hex string
+
+[2026-02-26 01:52:53.399231] Updating blogs 699fa69166b1aa777011db06 with {'title': 'test', 'blocks': [{'id': '1772070533482-quqtx78ro', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Umrah packge', 'level': 1}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 52, 53, 399231)}
+
+[2026-02-26 01:52:53.465676] Updating blogs 699fa69166b1aa777011db06 with {'slug': 'test', 'status': 'published', 'published_at': datetime.datetime(2026, 2, 26, 1, 52, 53, 465676), 'updated_at': datetime.datetime(2026, 2, 26, 1, 52, 53, 465676)}
+
+[2026-02-26 01:53:47.594201] Updating blogs 699fa69166b1aa777011db06 with {'title': 'test', 'blocks': [{'id': '1772070533482-quqtx78ro', 'type': <BlockType.HEADING: 'heading'>, 'order': 0, 'content': {'text': 'Umrah packge', 'level': 1}, 'styles': {}}, {'id': '1772070822073-50o25udat', 'type': <BlockType.PARAGRAPH: 'paragraph'>, 'order': 1, 'content': {'text': 'Paragraph text goes here...'}, 'styles': {}}], 'seoMeta': {'description': '', 'keywords': [], 'ogImage': None}, 'updated_at': datetime.datetime(2026, 2, 26, 1, 53, 47, 594201)}
+
+[2026-02-26 01:53:47.623571] Updating blogs 699fa69166b1aa777011db06 with {'slug': 'test-1', 'status': 'published', 'published_at': datetime.datetime(2026, 2, 26, 1, 53, 47, 623571), 'updated_at': datetime.datetime(2026, 2, 26, 1, 53, 47, 623571)}
+
+[2026-02-26 02:19:29.190267] Updating blogs 699fadb196cffd2e9153e3ce with {'slug': 'test', 'status': 'published', 'published_at': datetime.datetime(2026, 2, 26, 2, 19, 29, 189879), 'updated_at': datetime.datetime(2026, 2, 26, 2, 19, 29, 189879)}
+
+[2026-02-26 02:58:57.447379] Updating forms 699fb6cef894675bd3964cf3 with {'submissions': 1, 'updated_at': datetime.datetime(2026, 2, 26, 2, 58, 57, 447379)}
+
+[2026-02-26 03:15:03.375972] Updating flights 69950f0a4c55c7da7bfef4f6 with {'available_seats': 19, 'updated_at': datetime.datetime(2026, 2, 26, 3, 15, 3, 375972)}
+
+[2026-02-26 19:01:32.376216] Updating flights 69950f0a4c55c7da7bfef4f6 with {'available_seats': 18, 'updated_at': datetime.datetime(2026, 2, 26, 19, 1, 32, 376216)}
+
+[2026-02-26 19:01:39.051789] Updating agencies 6984b0213bc9604e560d430c with {'credit_used': 20000.0, 'updated_at': datetime.datetime(2026, 2, 26, 19, 1, 39, 51133)}
+
+[2026-02-26 19:01:39.052371] Updating ticket_bookings 69a0988c4bfd9a159895291f with {'payment_method': 'credit', 'payment_status': 'paid', 'booking_status': 'confirmed', 'paid_amount': 20000.0, 'updated_at': datetime.datetime(2026, 2, 26, 19, 1, 39, 52371)}
+
+[2026-02-26 19:02:40.264816] Updating agencies 6984b0213bc9604e560d430c with {'credit_used': 40000.0, 'updated_at': datetime.datetime(2026, 2, 26, 19, 2, 40, 264816)}
+
+[2026-02-26 19:02:40.265428] Updating ticket_bookings 69a0988c4bfd9a159895291f with {'payment_method': 'credit', 'payment_status': 'paid', 'booking_status': 'confirmed', 'paid_amount': 20000.0, 'updated_at': datetime.datetime(2026, 2, 26, 19, 2, 40, 265428)}
+
+[2026-02-26 19:02:47.271230] Updating agencies 6984b0213bc9604e560d430c with {'credit_used': 60000.0, 'updated_at': datetime.datetime(2026, 2, 26, 19, 2, 47, 271230)}
+
+[2026-02-26 19:02:47.273578] Updating ticket_bookings 69a0988c4bfd9a159895291f with {'payment_method': 'credit', 'payment_status': 'paid', 'booking_status': 'confirmed', 'paid_amount': 20000.0, 'updated_at': datetime.datetime(2026, 2, 26, 19, 2, 47, 273578)}

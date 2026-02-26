@@ -8,6 +8,8 @@ from jose import JWTError, jwt
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.config.settings import settings
+from app.database.db_operations import db_ops
+from app.config.database import Collections
 
 # JWT Bearer token
 security = HTTPBearer()
@@ -60,6 +62,30 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         return payload
 
     if payload.get("emp_id") or payload.get("_id") or payload.get("email"):
+        # If the token lacks organization context (missing or empty string),
+        # try to enrich it from the employee record in DB.
+        org_in_token = payload.get("organization_id") or ""  # treat empty string as missing
+        if not org_in_token.strip():
+            try:
+                # Try emp_id lookup first, fall back to email
+                emp_id_val = payload.get("emp_id") or ""
+                email_val = payload.get("email") or ""
+                employee = None
+                if emp_id_val.strip():
+                    employee = await db_ops.get_one(Collections.EMPLOYEES, {"emp_id": emp_id_val})
+                if not employee and email_val.strip():
+                    employee = await db_ops.get_one(Collections.EMPLOYEES, {"email": email_val})
+                if employee:
+                    # Try explicit organization_id field
+                    found_org = (employee.get("organization_id") or "").strip()
+                    # Fallback: derive from entity_id when entity_type is 'organization'
+                    if not found_org and (employee.get("entity_type") or "").lower() == "organization":
+                        found_org = (employee.get("entity_id") or "").strip()
+                    if found_org:
+                        payload["organization_id"] = found_org
+            except Exception as e:
+                import sys
+                print(f"Token enrichment failed: {e}", file=sys.stderr)
         return payload
     emp_id = payload.get("emp_id")
 
@@ -151,3 +177,38 @@ async def require_branch_admin(current_user: Dict = Depends(get_current_user)) -
             detail="Insufficient permissions"
         )
     return current_user
+
+def has_module_permission(current_user: Dict, module_code: str, action: str) -> bool:
+    """Check whether the current_user has a specific module permission.
+
+    Permission format: 'module.submodule.action' e.g. 'inventory.hotels.view'
+    Admin tokens (with 'sub') implicitly have all permissions.
+    """
+    if not current_user:
+        return False
+
+    # Admin tokens
+    if current_user.get("sub"):
+        return True
+
+    perms = current_user.get("permissions") or []
+    if isinstance(perms, dict):
+        # Some tokens may include structured permissions; flatten
+        flat = []
+        for k, v in perms.items():
+            if isinstance(v, dict):
+                for act, allowed in v.items():
+                    if allowed:
+                        flat.append(f"{k}.{act}")
+        perms = flat
+
+    # wildcard
+    if "*" in perms:
+        return True
+
+    code = f"{module_code}.{action}"
+    if code in perms:
+        return True
+
+    # also allow startswith checks for broader permissions
+    return any(p.startswith(module_code) for p in perms)

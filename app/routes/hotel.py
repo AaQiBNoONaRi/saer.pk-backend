@@ -50,9 +50,17 @@ async def create_hotel(
     hotel_dict = convert_dates_to_strings(hotel_dict)
 
     # Stamp the creating org's ID onto the hotel
-    org_id = current_user.get("organization_id")
+    org_id = (current_user.get("organization_id") or "").strip()
+    emp_id = current_user.get("emp_id") or current_user.get("_id")
+    is_super_admin = current_user.get('role') == 'super_admin'
+    # Require org context for everyone except a super_admin with no org (global admin)
+    if not org_id and not is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")
+
     if org_id:
         hotel_dict["organization_id"] = org_id
+    if emp_id:
+        hotel_dict["created_by_employee_id"] = emp_id
 
     # Ensure dates are strings for MongoDB (Motor can't encode datetime.date)
     for key, value in hotel_dict.items():
@@ -71,7 +79,10 @@ async def create_hotel(
 @router.get("/", response_model=List[HotelResponse])
 async def get_hotels(
     city: str = None,
-    min_rating: int = None,
+    category_id: Optional[str] = None,
+    available_from: Optional[date] = None,
+    available_until: Optional[date] = None,
+    min_rating: Optional[int] = None,
     skip: int = 0,
     limit: int = 20,
     current_user: dict = Depends(get_current_user)
@@ -79,10 +90,16 @@ async def get_hotels(
     """Get all hotels with optional filtering — scoped to the caller's org"""
     filter_query = {}
 
-    # Org-scoping: only show hotels belonging to the current user's organization
-    org_id = current_user.get("organization_id")
+    # Org-scoping:
+    # - If token carries an organization_id → always filter by it (no exceptions, any role)
+    # - If no organization_id AND role==super_admin → global view (no filter)
+    # - If no organization_id AND NOT super_admin → 403
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super_admin = current_user.get('role') == 'super_admin'
     if org_id:
         filter_query["organization_id"] = org_id
+    elif not is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")
 
     if city:
         filter_query["city"] = {"$regex": city, "$options": "i"}
@@ -90,12 +107,16 @@ async def get_hotels(
     if category_id:
         filter_query["category_id"] = category_id
 
-    # Date availability check logic could be complex.
-    # For now, simplistic check: hotel availability covers requested range
-    if available_from and available_until:
+    # Date availability check logic (simple): hotel.available_from <= requested available_from
+    # and hotel.available_until >= requested available_until
+    if available_from:
         filter_query["available_from"] = {"$lte": available_from.isoformat()}
-        filter_query["star_rating"] = {"$gte": min_rating}
+    if available_until:
         filter_query["available_until"] = {"$gte": available_until.isoformat()}
+
+    # Minimum star rating filter
+    if min_rating is not None:
+        filter_query["star_rating"] = {"$gte": min_rating}
 
     hotels = await db_ops.get_all(Collections.HOTELS, filter_query, skip=skip, limit=limit)
 
@@ -103,12 +124,12 @@ async def get_hotels(
     results = []
     for hotel in hotels:
         if hotel.get("category_id"):
-             category = await db_ops.get_by_id(Collections.HOTEL_CATEGORIES, hotel["category_id"])
-             if category:
-                 hotel["category_name"] = category.get("name")
+            category = await db_ops.get_by_id(Collections.HOTEL_CATEGORIES, hotel["category_id"])
+            if category:
+                hotel["category_name"] = category.get("name")
         results.append(hotel)
 
-    return serialize_docs(hotels)
+    return serialize_docs(results)
 
 @router.get("/{hotel_id}", response_model=HotelResponse)
 async def get_hotel(
@@ -122,6 +143,13 @@ async def get_hotel(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Hotel not found"
         )
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super_admin = current_user.get('role') == 'super_admin'
+    if org_id:
+        if hotel.get('organization_id') != org_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    elif not is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")
     return serialize_doc(hotel)
 
 @router.put("/{hotel_id}", response_model=HotelResponse)
@@ -136,6 +164,24 @@ async def update_hotel(
         raise HTTPException(status_code=400, detail="No fields to update")
     
     update_data = convert_dates_to_strings(update_data)
+    # Ensure org isolation and creator restriction
+    existing = await db_ops.get_by_id(Collections.HOTELS, hotel_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+
+    org_id = (current_user.get("organization_id") or "").strip()
+    emp_id = current_user.get("emp_id") or current_user.get("_id")
+    is_super_admin = current_user.get('role') == 'super_admin'
+    if org_id:
+        if existing.get('organization_id') != org_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    elif not is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")
+
+    # Optional: only creator or admin can modify
+    if existing.get('created_by_employee_id') and emp_id and existing.get('created_by_employee_id') != emp_id and not current_user.get('sub'):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only creator or admin can update")
+
     updated_hotel = await db_ops.update(Collections.HOTELS, hotel_id, update_data)
     if not updated_hotel:
         raise HTTPException(status_code=404, detail="Hotel not found")
@@ -148,6 +194,22 @@ async def delete_hotel(
     current_user: dict = Depends(get_current_user)
 ):
     """Delete hotel"""
+    existing = await db_ops.get_by_id(Collections.HOTELS, hotel_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Hotel not found")
+
+    org_id = (current_user.get("organization_id") or "").strip()
+    emp_id = current_user.get("emp_id") or current_user.get("_id")
+    is_super_admin = current_user.get('role') == 'super_admin'
+    if org_id:
+        if existing.get('organization_id') != org_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    elif not is_super_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")
+
+    if existing.get('created_by_employee_id') and emp_id and existing.get('created_by_employee_id') != emp_id and not current_user.get('sub'):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only creator or admin can delete")
+
     deleted = await db_ops.delete(Collections.HOTELS, hotel_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Hotel not found")

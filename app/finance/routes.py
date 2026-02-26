@@ -262,6 +262,7 @@ async def ledger(
     branch_id: Optional[str] = None,
     agency_id: Optional[str] = None,
     account_id: Optional[str] = None,
+    account_name: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     skip: int = 0,
@@ -269,11 +270,48 @@ async def ledger(
     current_user: dict = Depends(get_current_user),
 ):
     base = _report_params(current_user)
+    org_id = organization_id or base["organization_id"]
+    
+    resolved_account_id = account_id
+    if account_name and not resolved_account_id:
+        from app.finance.journal_engine import _resolve_account
+        acc = await _resolve_account(org_id, account_name)
+        if acc:
+            resolved_account_id = str(acc["_id"])
+
     return await reports.get_ledger(
-        organization_id or base["organization_id"],
+        org_id,
         branch_id       or base["branch_id"],
         agency_id       or base["agency_id"],
-        account_id, date_from, date_to, skip, limit,
+        resolved_account_id, date_from, date_to, skip, limit,
+    )
+
+
+@router.get("/reports/agency-statement")
+async def agency_statement(
+    agency_id: Optional[str] = None,
+    organization_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 500,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Returns an agency's statement from THEIR perspective.
+    Can be called by the agency itself (agency_id derived from JWT),
+    or by an org user passing agency_id as a query param.
+    """
+    base = _report_params(current_user)
+    resolved_agency_id = agency_id or base.get("agency_id")
+    if not resolved_agency_id:
+        raise HTTPException(status_code=400, detail="agency_id is required")
+    org_id = organization_id or base.get("organization_id")
+    return await reports.get_agency_statement(
+        agency_id=resolved_agency_id,
+        organization_id=org_id,
+        date_from=date_from,
+        date_to=date_to,
+        limit=limit,
     )
 
 

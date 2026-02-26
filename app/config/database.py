@@ -92,10 +92,12 @@ class Collections:
     SERVICE_CHARGES = "service_charges"
     COMMISSIONS = "commissions"
     DISCOUNTS = "discounts"
+    DISCOUNTED_HOTELS = "discounted_hotels"
     
     # Content Management Collections
     BLOGS = "blogs"
     FORMS = "forms"
+    FORM_SUBMISSIONS = "form_submissions"
     # Hotel PMS Collections
     HOTEL_CATEGORIES = "hotel_categories"
     BED_TYPES = "bed_types"

@@ -94,6 +94,7 @@ DEFAULT_COA = [
     {"code": "4002", "name": "Ticket Revenue",       "type": "income",    "parent": "4000"},
     {"code": "4003", "name": "Visa Revenue",         "type": "income",    "parent": "4000"},
     {"code": "4004", "name": "Service Charges",      "type": "income",    "parent": "4000"},
+    {"code": "4005", "name": "Custom Revenue",       "type": "income",    "parent": "4000"},
     # Expenses
     {"code": "5000", "name": "Expenses",             "type": "expense",   "parent": None},
     {"code": "5001", "name": "Cost of Sales",        "type": "expense",   "parent": "5000"},
