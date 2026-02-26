@@ -50,8 +50,11 @@ from app.routes import (
     customers,
     tasks,
     role_groups,
+    # AIQS Flight Search
+    flight_search,
 )
 from app.finance import routes as finance_routes
+from app.routes import debug
 
 
 @asynccontextmanager
@@ -84,13 +87,25 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "http://localhost:5174", 
+        "http://localhost:5174",
         "http://localhost:5175",
         "http://localhost:5176",  # Agency portal
+        "http://localhost:5177",
+        "http://localhost:5178",
+        "http://localhost:5179",
+        "http://localhost:5180",  # Public portal
+        "http://localhost:5181",
+        "http://localhost:5182",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
         "http://127.0.0.1:5176",
+        "http://127.0.0.1:5177",
+        "http://127.0.0.1:5178",
+        "http://127.0.0.1:5179",
+        "http://127.0.0.1:5180",
+        "http://127.0.0.1:5181",
+        "http://127.0.0.1:5182",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -142,6 +157,9 @@ app.include_router(package.router, prefix="/api")
 app.include_router(discount.router, prefix="/api")
 app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
+# Discounted Hotels
+from app.routes import discounted_hotels
+app.include_router(discounted_hotels.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
@@ -153,6 +171,9 @@ app.include_router(custom_booking.router, prefix="/api")
 app.include_router(pax_movement.router, prefix="/api")
 app.include_router(operations.router, prefix="/api")
 
+# Flight Search (AIQS)
+app.include_router(flight_search.router, prefix="/api")
+
 # Payment System (Kuickapay)
 app.include_router(payment.router)
 
@@ -162,6 +183,7 @@ app.include_router(passport_leads.router, prefix="/api")
 app.include_router(customers.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(role_groups.router, prefix="/api")
+app.include_router(debug.router, prefix="/api")
 
 # Finance & Accounting Module
 app.include_router(finance_routes.router, prefix="/api")

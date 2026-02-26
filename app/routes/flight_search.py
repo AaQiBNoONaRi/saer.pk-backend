@@ -43,23 +43,48 @@ def _build_segment_group(ond_pairs: list, include_brand_id: bool = False) -> lis
         ond_id = pair.get("ond", {}).get("ondID", 0)  # ondID lives on the ond object
         for fd in pair.get("flightDetails", []):
             flifo = fd.get("flifo", {})
+            # Location fields can be either strings or objects like { trueLocationId: 'LHE' }
+            loc = flifo.get("location", {}) or {}
+            def _extract_airport(x):
+                if not x:
+                    return ''
+                if isinstance(x, dict):
+                    return x.get('trueLocationId') or x.get('locationId') or ''
+                return x
+
+            dep_airport = _extract_airport(loc.get('depAirport') or flifo.get('depAirport'))
+            arr_airport = _extract_airport(loc.get('arrAirport') or flifo.get('arrAirport'))
+
+            # company info may be in companyId or directly on location
+            mktg = None
+            oper = None
+            issuing = None
+            comp = flifo.get('companyId') or loc.get('companyId') or {}
+            mktg = comp.get('mktgAirline') or loc.get('mktgAirline') or comp.get('marketing')
+            oper = comp.get('operAirline') or loc.get('operAirline') or comp.get('operating')
+            issuing = comp.get('issuingAirline') or loc.get('issuingAirline') or mktg
+
             seg = {
                 "flifo": {
                     "dateTime": flifo.get("dateTime", {}),
-                    "location": flifo.get("location", {}),
-                    "mktgAirline": flifo.get("companyId", {}).get("mktgAirline"),
-                    "operAirline": flifo.get("companyId", {}).get("operAirline"),
-                    "issuingAirline": flifo.get("companyId", {}).get("mktgAirline"),
-                    "flightNo": flifo.get("flightNo"),
-                    "rbd": flifo.get("rbd"),          # Booking class (e.g. "L"), NOT cabin ("Y")
+                    "location": {
+                        "depAirport": dep_airport,
+                        "arrAirport": arr_airport,
+                        **({} if not loc else {}),
+                    },
+                    "mktgAirline": mktg,
+                    "operAirline": oper,
+                    "issuingAirline": issuing,
+                    "flightNo": flifo.get("flightNo") or fd.get('flightNo'),
+                    "rbd": flifo.get("rbd"),
                     "flightTypeDetails": {
-                        "ondID": ond_id,              # From parent ond object
+                        "ondID": ond_id,
                         "segID": fd.get("segID", 0),
                     },
                 }
             }
             if include_brand_id:
-                seg["brandId"] = None   # Must be null (not 0) per AIQS spec
+                seg["brandId"] = None
             segment_group.append(seg)
     return segment_group
 
@@ -174,14 +199,17 @@ async def validate_flight(req: FlightValidateRequest):
         from_airport = ""
         to_airport = ""
         if ond_pairs:
-            from_airport = (
-                ond_pairs[0].get("flightDetails", [{}])[0]
-                .get("flifo", {}).get("location", {}).get("depAirport", "")
-            )
-            to_airport = (
-                ond_pairs[-1].get("flightDetails", [{}])[-1]
-                .get("flifo", {}).get("location", {}).get("arrAirport", "")
-            )
+            def _maybe_extract_airport(obj):
+                if not obj:
+                    return ''
+                if isinstance(obj, dict):
+                    return obj.get('trueLocationId') or obj.get('depAirport') or obj.get('locationId') or ''
+                return obj
+
+            first_fd = ond_pairs[0].get("flightDetails", [{}])[0].get("flifo", {})
+            last_fd = ond_pairs[-1].get("flightDetails", [{}])[-1].get("flifo", {})
+            from_airport = _maybe_extract_airport(first_fd.get('location') or first_fd.get('depAirport'))
+            to_airport = _maybe_extract_airport(last_fd.get('location') or last_fd.get('arrAirport'))
 
         supplier_specific = _get_supplier_specific(req.supplierSpecific)
 
@@ -196,7 +224,7 @@ async def validate_flight(req: FlightValidateRequest):
         rest_payload = {
             "request": {
                 "service": "FlightRQ",
-                "supplierCodes": [2],
+                "supplierCodes": [int(req.supplierCode) if req.supplierCode else 2],
                 "node": {"agencyCode": "CLI_11078"},
                 "searchKey": search_key,
                 "content": {
@@ -276,7 +304,7 @@ async def get_fare_rules(req: FareRulesRequest):
         rest_payload = {
             "request": {
                 "service": "FlightRQ",
-                "supplierCodes": [2],
+                "supplierCodes": [int(req.supplierCode) if req.supplierCode else 2],
                 "node": {"agencyCode": "CLI_11078"},
                 "content": {
                     "command": "FlightFareruleRQ",
@@ -338,7 +366,7 @@ async def get_branded_fares(req: AncillaryRequest):
         rest_payload = {
             "request": {
                 "service": "FlightRQ",
-                "supplierCodes": [2],
+                "supplierCodes": [int(req.supplierCode) if req.supplierCode else 2],
                 "node": {"agencyCode": "CLI_11078"},
                 "content": {
                     "command": "FlightBrandRQ",
@@ -388,43 +416,54 @@ async def get_meals(req: AncillaryRequest):
         ond_pairs = raw.get("ondPairs", [])
         segment_group = _build_segment_group(ond_pairs)
 
-        from_airport = ""
-        to_airport = ""
-        if ond_pairs:
-            from_airport = ond_pairs[0].get("flightDetails", [{}])[0].get("flifo", {}).get("location", {}).get("depAirport", "")
-            to_airport = ond_pairs[-1].get("flightDetails", [{}])[-1].get("flifo", {}).get("location", {}).get("arrAirport", "")
-
-        supplier_specific = _get_supplier_specific(req.supplierSpecific)
+        # supplierSpecific must be a plain object (not array) for ancillary endpoints
+        raw_ss = req.supplierSpecific
+        if isinstance(raw_ss, list):
+            supplier_specific = raw_ss[0] if raw_ss else {}
+        elif isinstance(raw_ss, dict):
+            supplier_specific = raw_ss
+        else:
+            supplier_specific = {}
 
         rest_payload = {
             "request": {
                 "service": "FlightRQ",
-                "supplierCodes": [2],
+                "supplierCodes": [int(req.supplierCode) if req.supplierCode else 2],
                 "node": {"agencyCode": "CLI_11078"},
                 "content": {
                     "command": "FlightMealAncillaryRQ",
                     "flightMealRequest": {
-                        "target": "Test",
-                        "totalAmount": None,
+                        "adt": raw.get("paxQuantity", {}).get("adt", 1),
+                        "chd": raw.get("paxQuantity", {}).get("chd", 0),
+                        "inf": raw.get("paxQuantity", {}).get("inf", 0),
                         "segmentGroup": segment_group,
-                        "from": from_airport,
-                        "to": to_airport,
                     },
                     "supplierSpecific": supplier_specific,
                 },
-                "selectCredential": {"id": 33, "officeIdList": [{"id": 24}]},
+                "selectCredential": {"id": 167},
             }
         }
 
-        result = await _rest_post("/api/air/meals", rest_payload, id_token)
+        import json as _json
+        print(f"\n[MEALS] → supplier={req.supplierCode} supplierSpecific type={type(supplier_specific).__name__}")
+        print(f"[MEALS] → payload: {_json.dumps(rest_payload)[:1000]}")
+        try:
+            result = await _rest_post("/api/air/getMeal", rest_payload, id_token, timeout=20)
+        except Exception as rest_err:
+            # Many airlines don't support meal ancillaries — return empty gracefully
+            print(f"[MEALS] ⚠ API returned error (likely not supported for this airline): {rest_err}")
+            return {"meals": [], "supported": False, "message": "Meal ancillaries not available for this flight."}
 
         content = result.get("response", {}).get("content", {})
         meal_rs = content.get("mealResponse", content.get("flightMealResponse", []))
         meals = meal_rs if isinstance(meal_rs, list) else []
 
-        return {"meals": meals, "raw": result}
+        return {"meals": meals, "raw": result, "supported": True}
 
     except Exception as e:
+        import traceback
+        print(f"[MEALS] ✗ Error: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Meals fetch failed: {str(e)}",
@@ -445,44 +484,46 @@ async def get_baggage(req: AncillaryRequest):
         raw = req.rawData or {}
         ond_pairs = raw.get("ondPairs", [])
         segment_group = _build_segment_group(ond_pairs)
-
-        from_airport = ""
-        to_airport = ""
-        if ond_pairs:
-            from_airport = ond_pairs[0].get("flightDetails", [{}])[0].get("flifo", {}).get("location", {}).get("depAirport", "")
-            to_airport = ond_pairs[-1].get("flightDetails", [{}])[-1].get("flifo", {}).get("location", {}).get("arrAirport", "")
-
         supplier_specific = _get_supplier_specific(req.supplierSpecific)
 
         rest_payload = {
             "request": {
                 "service": "FlightRQ",
-                "supplierCodes": [2],
+                "supplierCodes": [int(req.supplierCode) if req.supplierCode else 2],
                 "node": {"agencyCode": "CLI_11078"},
                 "content": {
                     "command": "FlightBaggageAncillaryRQ",
                     "flightBaggageRequest": {
-                        "target": "Test",
-                        "totalAmount": None,
+                        "adt": raw.get("paxQuantity", {}).get("adt", 1),
+                        "chd": raw.get("paxQuantity", {}).get("chd", 0),
+                        "inf": raw.get("paxQuantity", {}).get("inf", 0),
                         "segmentGroup": segment_group,
-                        "from": from_airport,
-                        "to": to_airport,
                     },
                     "supplierSpecific": supplier_specific,
                 },
-                "selectCredential": {"id": 33, "officeIdList": [{"id": 24}]},
+                "selectCredential": {"id": 167},
             }
         }
 
-        result = await _rest_post("/api/air/baggage", rest_payload, id_token)
+        import json as _json
+        print(f"\n[BAGGAGE] → supplier={req.supplierCode}")
+        print(f"[BAGGAGE] → payload: {_json.dumps(rest_payload)[:1000]}")
+        try:
+            result = await _rest_post("/api/air/getBaggage", rest_payload, id_token, timeout=20)
+        except Exception as rest_err:
+            print(f"[BAGGAGE] ⚠ API returned error (likely not supported for this airline): {rest_err}")
+            return {"baggage": [], "supported": False, "message": "Extra baggage ancillaries not available for this flight."}
 
         content = result.get("response", {}).get("content", {})
         bag_rs = content.get("baggageResponse", content.get("flightBaggageResponse", []))
         baggage = bag_rs if isinstance(bag_rs, list) else []
 
-        return {"baggage": baggage, "raw": result}
+        return {"baggage": baggage, "raw": result, "supported": True}
 
     except Exception as e:
+        import traceback
+        print(f"[BAGGAGE] ✗ Error: {e}")
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Baggage fetch failed: {str(e)}",

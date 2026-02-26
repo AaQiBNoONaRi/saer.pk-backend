@@ -33,7 +33,15 @@ class BlogStatus(str, Enum):
 class BlogBase(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     slug: Optional[str] = None
-    blocks: List[ContentBlock] = Field(default_factory=list)
+    blocks: Optional[List[ContentBlock]] = Field(default_factory=list) # Legacy/Optional
+    content: Optional[str] = None
+    custom_css: Optional[str] = None
+    thumbnail_image_url: Optional[str] = None
+    gallery_images: List[str] = Field(default_factory=list)
+    video_url: Optional[str] = None
+    author: Optional[str] = None
+    category: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
     seoMeta: Optional[SEOMeta] = Field(default_factory=SEOMeta)
     status: BlogStatus = BlogStatus.DRAFT
     views: int = 0
@@ -42,12 +50,28 @@ class BlogBase(BaseModel):
 class BlogCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     blocks: Optional[List[ContentBlock]] = Field(default_factory=list)
+    content: Optional[str] = None
+    custom_css: Optional[str] = None
+    thumbnail_image_url: Optional[str] = None
+    gallery_images: Optional[List[str]] = Field(default_factory=list)
+    video_url: Optional[str] = None
+    author: Optional[str] = None
+    category: Optional[str] = None
+    tags: Optional[List[str]] = Field(default_factory=list)
     seoMeta: Optional[SEOMeta] = None
 
 class BlogUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
     slug: Optional[str] = None
     blocks: Optional[List[ContentBlock]] = None
+    content: Optional[str] = None
+    custom_css: Optional[str] = None
+    thumbnail_image_url: Optional[str] = None
+    gallery_images: Optional[List[str]] = None
+    video_url: Optional[str] = None
+    author: Optional[str] = None
+    category: Optional[str] = None
+    tags: Optional[List[str]] = None
     seoMeta: Optional[SEOMeta] = None
     status: Optional[BlogStatus] = None
     views: Optional[int] = None
@@ -59,7 +83,15 @@ class BlogResponse(BaseModel):
     slug: Optional[str] = None
     previewUuid: Optional[str] = None
     status: BlogStatus
-    blocks: List[ContentBlock]
+    blocks: Optional[List[ContentBlock]] = Field(default_factory=list)
+    content: Optional[str] = None
+    custom_css: Optional[str] = None
+    thumbnail_image_url: Optional[str] = None
+    gallery_images: List[str] = Field(default_factory=list)
+    video_url: Optional[str] = None
+    author: Optional[str] = None
+    category: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
     seoMeta: Optional[SEOMeta] = None
     views: int = 0
     autoPage: bool = False

@@ -41,6 +41,33 @@ async def login(credentials: EmployeeLogin):
             detail="Employee account is inactive"
         )
     
+    # Get permissions (check group first if group_id exists)
+    permissions = employee.get("permissions", ["crm"])
+    if employee.get("group_id"):
+        try:
+            group = await db_ops.get_by_id('role_groups', employee.get('group_id'))
+            if group:
+                # New format: permissions is a list of permission codes
+                if isinstance(group.get('permissions'), list):
+                    permissions = group.get('permissions', [])
+                # Legacy format: permissions is a dict of module -> actions
+                elif isinstance(group.get('permissions'), dict):
+                    perms = []
+                    for mod, actions in group.get('permissions', {}).items():
+                        try:
+                            if any(actions.values()):
+                                perms.append(mod)
+                        except Exception:
+                            continue
+                    permissions = perms
+        except Exception as e:
+            print(f"Failed to fetch group permissions: {e}")
+    
+    # Include organization_id explicitly from DB (if present)
+    org_id = employee.get("organization_id") if employee.get("organization_id") else None
+    # Fallback: if entity_type is 'organization', derive from entity_id
+    if not org_id and employee.get("entity_type", "").lower() == "organization":
+        org_id = employee.get("entity_id") or None
     token_data = {
         "_id": str(employee["_id"]),
         "emp_id": employee["emp_id"],
@@ -49,14 +76,18 @@ async def login(credentials: EmployeeLogin):
         "entity_type": employee["entity_type"],
         "entity_id": employee["entity_id"],
         "role": employee["role"],
-        "permissions": employee.get("permissions", ["crm"]),
+        "permissions": permissions,
         "user_type": "employee"
     }
+    if org_id:
+        token_data["organization_id"] = org_id
     access_token = create_access_token(token_data)
 
     
     employee_out = serialize_doc(employee)
     employee_out.pop("hashed_password", None)
+    # Update employee_out with fresh permissions for the frontend
+    employee_out["permissions"] = permissions
     
     return {
         "status": "success",
@@ -101,6 +132,34 @@ async def login_with_email(credentials: EmployeeEmailLogin):
     
     # Build JWT payload with full employee context
     permissions = employee.get("permissions", ["crm"])
+    
+    # If employee has a group_id, fetch fresh permissions from the group
+    if employee.get("group_id"):
+        try:
+            group = await db_ops.get_by_id('role_groups', employee.get('group_id'))
+            if group:
+                # New format: permissions is a list of permission codes
+                if isinstance(group.get('permissions'), list):
+                    permissions = group.get('permissions', [])
+                # Legacy format: permissions is a dict of module -> actions
+                elif isinstance(group.get('permissions'), dict):
+                    perms = []
+                    for mod, actions in group.get('permissions', {}).items():
+                        try:
+                            if any(actions.values()):
+                                perms.append(mod)
+                        except Exception:
+                            continue
+                    permissions = perms
+        except Exception as e:
+            # If group fetch fails, use employee's stored permissions
+            print(f"Failed to fetch group permissions: {e}")
+    
+    # Include organization_id explicitly from DB (if present)
+    org_id = employee.get("organization_id") if employee.get("organization_id") else None
+    # Fallback: if entity_type is 'organization', derive from entity_id
+    if not org_id and employee.get("entity_type", "").lower() == "organization":
+        org_id = employee.get("entity_id") or None
     token_data = {
         "_id": str(employee["_id"]),
         "emp_id": employee.get("emp_id", ""),
@@ -109,18 +168,21 @@ async def login_with_email(credentials: EmployeeEmailLogin):
         "name": employee.get("name") or employee.get("full_name", ""),
         "entity_type": employee["entity_type"],
         "entity_id": employee["entity_id"],
-        "organization_id": employee.get("organization_id", ""),
         "branch_id": employee.get("branch_id", ""),
         "agency_id": employee.get("agency_id", ""),
         "role": employee["role"],
         "permissions": permissions,
         "user_type": "employee"
     }
+    if org_id:
+        token_data["organization_id"] = org_id
     access_token = create_access_token(token_data)
 
     
     employee_out = serialize_doc(employee)
     employee_out.pop("hashed_password", None)
+    # Update employee_out with fresh permissions for the frontend
+    employee_out["permissions"] = permissions
     
     return {
         "status": "success",
@@ -221,15 +283,20 @@ async def create_employee(
     # If a group_id is provided, resolve permissions from the role group
     if employee_dict.get('group_id'):
         group = await db_ops.get_by_id('role_groups', employee_dict['group_id'])
-        if group and isinstance(group.get('permissions'), dict):
-            perms = []
-            for mod, actions in group.get('permissions', {}).items():
-                try:
-                    if any(actions.values()):
-                        perms.append(mod)
-                except Exception:
-                    continue
-            employee_dict['permissions'] = perms
+        if group:
+            # New format: permissions is a list of permission codes
+            if isinstance(group.get('permissions'), list):
+                employee_dict['permissions'] = group.get('permissions', [])
+            # Legacy format: permissions is a dict of module -> actions
+            elif isinstance(group.get('permissions'), dict):
+                perms = []
+                for mod, actions in group.get('permissions', {}).items():
+                    try:
+                        if any(actions.values()):
+                            perms.append(mod)
+                    except Exception:
+                        continue
+                employee_dict['permissions'] = perms
     
     # Hash password
     password = employee_dict.pop("password")
@@ -315,15 +382,20 @@ async def update_employee(
     # If group_id provided in update, resolve permissions from the group
     if "group_id" in update_data and update_data.get("group_id"):
         group = await db_ops.get_by_id('role_groups', update_data.get('group_id'))
-        if group and isinstance(group.get('permissions'), dict):
-            perms = []
-            for mod, actions in group.get('permissions', {}).items():
-                try:
-                    if any(actions.values()):
-                        perms.append(mod)
-                except Exception:
-                    continue
-            update_data['permissions'] = perms
+        if group:
+            # New format: permissions is a list of permission codes
+            if isinstance(group.get('permissions'), list):
+                update_data['permissions'] = group.get('permissions', [])
+            # Legacy format: permissions is a dict of module -> actions
+            elif isinstance(group.get('permissions'), dict):
+                perms = []
+                for mod, actions in group.get('permissions', {}).items():
+                    try:
+                        if any(actions.values()):
+                            perms.append(mod)
+                    except Exception:
+                        continue
+                update_data['permissions'] = perms
     # Validate permissions if provided and no group mapping
     if "permissions" in update_data and not update_data.get('group_id'):
         valid_perms = {"crm", "employees"}
