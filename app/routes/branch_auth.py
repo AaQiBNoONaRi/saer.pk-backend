@@ -11,7 +11,7 @@ from app.utils.helpers import serialize_doc
 router = APIRouter(prefix="/branches", tags=["Branch Authentication"])
 
 class BranchLogin(BaseModel):
-    email: EmailStr
+    username: str # Can be email or username
     password: str
 
 @router.post("/login")
@@ -21,15 +21,30 @@ async def branch_login(credentials: BranchLogin):
     Authenticates branch users and returns access token
     """
     try:
-        # Find branch by email
-        branch = await db_ops.get_one(Collections.BRANCHES, {"email": credentials.email})
+        # Find branch by email first, then by username
+        print(f"Branch login attempt for: '{credentials.username}'")
+        branch = await db_ops.get_one(Collections.BRANCHES, {"email": credentials.username})
         
         if not branch:
+            print(f"  → Not found by email, trying by username...")
+            branch = await db_ops.get_one(Collections.BRANCHES, {"username": credentials.username})
+        
+        if not branch:
+            print(f"  → Branch not found by email or username. Check the email in the database.")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
+                detail="Invalid username or password"
             )
         
+        print(f"  → Found branch: {branch.get('name')} | has_password: {bool(branch.get('password'))} | portal_enabled: {branch.get('portal_access_enabled', True)}")
+        
+        # Check if portal access is enabled
+        if not branch.get("portal_access_enabled", True):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Portal access is disabled for this branch"
+            )
+
         # Check if branch is active
         if not branch.get("is_active", True):
             raise HTTPException(
@@ -37,12 +52,13 @@ async def branch_login(credentials: BranchLogin):
                 detail="Branch account is deactivated"
             )
         
-        # Verify password (check both 'password' and legacy 'hashed_password' fields)
+        # Verify password
         stored_password = branch.get("password") or branch.get("hashed_password")
         if not stored_password:
-             raise HTTPException(
+            print(f"  → No password stored for this branch. Use 'Set Password' in the org portal.")
+            raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password" # No password set
+                detail="No password has been set for this branch. Please contact your organization admin to set the portal password."
             )
 
         try:

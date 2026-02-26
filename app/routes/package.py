@@ -25,7 +25,7 @@ async def create_package(
 async def get_packages(
     is_active: bool = None,
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 100,
     current_user: dict = Depends(get_current_user)
 ):
     """Get all packages with optional filtering"""

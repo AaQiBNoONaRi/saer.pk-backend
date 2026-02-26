@@ -176,6 +176,20 @@ async def create_umrah_booking(
         current_user.get('email', 'Unknown')
     )
 
+    # ── Record Booker Identity ──
+    booking_dict['booked_by_role'] = role
+    booking_dict['booked_by_id'] = current_user.get('sub')
+    booking_dict['booked_by_name'] = (
+        current_user.get('name') or 
+        current_user.get('agency_name') or 
+        current_user.get('branch_name') or 
+        current_user.get('email', 'Unknown')
+    )
+
+    # ── If branch books directly, ensure agency_id is null ──
+    if role == 'branch':
+        booking_dict['agency_id'] = None
+
     # ── fetch & embed full hierarchy documents (strip password fields) ──
     if agency_id:
         agency_doc = await db_ops.get_by_id(Collections.AGENCIES, agency_id)
@@ -307,6 +321,8 @@ async def get_umrah_bookings(
     elif role == 'branch' or entity_type == 'branch':
         bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['branch_id'] = bid
+        # Only show bookings made directly by the branch
+        filter_query['booked_by_role'] = 'branch'
 
     if booking_status:
         filter_query['booking_status'] = booking_status

@@ -936,6 +936,8 @@ async def get_payments(
         query['agency_id'] = current_user.get('agency_id') or current_user.get('sub')
     elif role == 'branch':
         query['branch_id'] = current_user.get('branch_id') or current_user.get('sub')
+        # Branches should only see their own payments, not their sub-agencies
+        query['agency_id'] = {"$exists": False}
         
     if status:
         query['status'] = status

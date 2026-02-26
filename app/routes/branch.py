@@ -3,6 +3,7 @@ Branch routes
 """
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
+from pydantic import BaseModel
 from app.models.branch import BranchCreate, BranchUpdate, BranchResponse
 from app.database.db_operations import db_ops
 from app.config.database import Collections
@@ -116,6 +117,36 @@ async def update_branch(
         )
     
     updated_branch = await db_ops.update(Collections.BRANCHES, branch_id, update_data)
+    if not updated_branch:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Branch not found"
+        )
+    
+    return serialize_doc(updated_branch)
+
+class BranchPasswordSet(BaseModel):
+    password: str
+
+@router.post("/{branch_id}/set-password", response_model=BranchResponse)
+async def set_branch_password(
+    branch_id: str,
+    data: BranchPasswordSet,
+    current_user: dict = Depends(require_org_admin)
+):
+    """Set or reset a branch portal password (Org Admin only)"""
+    if not data.password or len(data.password) < 4:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 4 characters"
+        )
+    
+    hashed = hash_password(data.password)
+    updated_branch = await db_ops.update(
+        Collections.BRANCHES,
+        branch_id,
+        {"password": hashed, "portal_access_enabled": True}
+    )
     if not updated_branch:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
