@@ -116,3 +116,5 @@
 [2026-02-26 19:02:47.271230] Updating agencies 6984b0213bc9604e560d430c with {'credit_used': 60000.0, 'updated_at': datetime.datetime(2026, 2, 26, 19, 2, 47, 271230)}
 
 [2026-02-26 19:02:47.273578] Updating ticket_bookings 69a0988c4bfd9a159895291f with {'payment_method': 'credit', 'payment_status': 'paid', 'booking_status': 'confirmed', 'paid_amount': 20000.0, 'updated_at': datetime.datetime(2026, 2, 26, 19, 2, 47, 273578)}
+
+[2026-02-26 21:19:58.180488] Updating flights 69950f0a4c55c7da7bfef4f6 with {'available_seats': 17, 'updated_at': datetime.datetime(2026, 2, 26, 21, 19, 58, 180488)}
