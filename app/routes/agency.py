@@ -196,3 +196,88 @@ async def delete_agency(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agency not found"
         )
+
+@router.get("/{agency_id}/stats")
+async def get_agency_stats(
+    agency_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get statistics for an agency including bookings and payment performance"""
+    from datetime import datetime, timedelta
+    
+    # Verify agency exists
+    agency = await db_ops.get_by_id(Collections.AGENCIES, agency_id)
+    if not agency:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Agency not found"
+        )
+    
+    # Get total bookings from all booking collections
+    ticket_bookings = await db_ops.get_all(Collections.TICKET_BOOKINGS, {"agency_id": agency_id})
+    umrah_bookings = await db_ops.get_all(Collections.UMRAH_BOOKINGS, {"agency_id": agency_id})
+    custom_bookings = await db_ops.get_all(Collections.CUSTOM_BOOKINGS, {"agency_id": agency_id})
+    
+    # Combine all bookings
+    all_bookings = ticket_bookings + umrah_bookings + custom_bookings
+    total_bookings = len(all_bookings)
+    
+    # Get all payments for this agency
+    payments = await db_ops.get_all(Collections.PAYMENTS, {"agency_id": agency_id})
+    
+    # Calculate payment statistics
+    on_time_payments = 0
+    late_payments = 0
+    credit_limit_days = agency.get("credit_limit_days", 30)
+    
+    for payment in payments:
+        if payment.get("status") == "approved" and payment.get("payment_date"):
+            # Get the related booking to determine due date
+            # Check all three booking collections
+            booking_id = payment.get("booking_id")
+            booking = None
+            
+            # Try ticket bookings first
+            booking = await db_ops.get_by_id(Collections.TICKET_BOOKINGS, booking_id)
+            
+            # If not found, try umrah bookings
+            if not booking:
+                booking = await db_ops.get_by_id(Collections.UMRAH_BOOKINGS, booking_id)
+            
+            # If still not found, try custom bookings
+            if not booking:
+                booking = await db_ops.get_by_id(Collections.CUSTOM_BOOKINGS, booking_id)
+            
+            if booking and booking.get("created_at"):
+                # Calculate due date: booking creation date + credit_limit_days
+                booking_date = booking["created_at"]
+                if isinstance(booking_date, str):
+                    booking_date = datetime.fromisoformat(booking_date.replace('Z', '+00:00'))
+                
+                due_date = booking_date + timedelta(days=credit_limit_days)
+                
+                # Parse payment date
+                payment_date_str = payment["payment_date"]
+                try:
+                    # Try parsing as YYYY-MM-DD
+                    payment_date = datetime.strptime(payment_date_str, "%Y-%m-%d")
+                except:
+                    try:
+                        # Try parsing as ISO format
+                        payment_date = datetime.fromisoformat(payment_date_str.replace('Z', '+00:00'))
+                    except:
+                        continue
+                
+                # Compare payment date with due date
+                if payment_date <= due_date:
+                    on_time_payments += 1
+                else:
+                    late_payments += 1
+    
+    return {
+        "total_bookings": total_bookings,
+        "on_time_payments": on_time_payments,
+        "late_payments": late_payments,
+        "total_payments": on_time_payments + late_payments,
+        "disputes": 0  # Placeholder for future implementation
+    }

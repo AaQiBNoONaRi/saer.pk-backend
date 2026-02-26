@@ -42,3 +42,19 @@
 [2026-02-24 22:27:48.322768] Updating operations 699e2021fe819b73de8f1091 with {'status': 'checked_in', 'updated_at': datetime.datetime(2026, 2, 24, 22, 27, 48, 322417), 'checked_in_at': datetime.datetime(2026, 2, 24, 22, 27, 48, 322382)}
 
 [2026-02-24 22:30:10.734957] Updating operations 699e2021fe819b73de8f1091 with {'status': 'checked_out', 'updated_at': datetime.datetime(2026, 2, 24, 22, 30, 10, 734664), 'checked_out_at': datetime.datetime(2026, 2, 24, 22, 30, 10, 734626)}
+
+[2026-02-26 18:57:34.843184] Updating employees 69922995820694cd229619b7 with {'name': 'employee1', 'email': 'employee1@gmail.com', 'phone': '03222939981', 'role': 'ORGANIZATION_EMPLOYEE', 'is_active': True, 'portal_access_enabled': True, 'username': 'employee1@gmail.com', 'permissions': ['crm'], 'group_id': '', 'hashed_password': '$2b$12$NBNaAbgl2FpeRIu4I2.nze6sjip/hCYpnvRidR1u3wzR9PalrY5ae', 'updated_at': datetime.datetime(2026, 2, 26, 18, 57, 34, 842840)}
+
+[2026-02-26 20:53:10.985781] Updating flights 698a037d1cc0fb4afe16d98b with {'available_seats': 45, 'updated_at': datetime.datetime(2026, 2, 26, 20, 53, 10, 985489)}
+
+[2026-02-26 20:53:39.388544] Updating ticket_bookings 69a0b2b694c10e7ebaf2ead0 with {'payment_method': 'bank', 'payment_status': 'pending', 'updated_at': datetime.datetime(2026, 2, 26, 20, 53, 39, 388110)}
+
+[2026-02-26 20:54:29.456680] Updating payments 69a0b2d394c10e7ebaf2ead1 with {'status': 'approved', 'updated_at': datetime.datetime(2026, 2, 26, 20, 54, 29, 456276)}
+
+[2026-02-26 20:54:29.458722] Updating ticket_bookings 69a0b2b694c10e7ebaf2ead0 with {'payment_status': 'paid', 'paid_amount': 5000.0, 'booking_status': 'confirmed', 'updated_at': datetime.datetime(2026, 2, 26, 20, 54, 29, 458471)}
+
+[2026-02-26 20:55:11.283205] Updating flights 698a037d1cc0fb4afe16d98b with {'available_seats': 44, 'updated_at': datetime.datetime(2026, 2, 26, 20, 55, 11, 282864)}
+
+[2026-02-26 21:00:06.652261] Updating agencies 69909ab35c6c1b239f356615 with {'name': 'aqib', 'email': 'agency@gmail.com', 'phone': '03222939981', 'address': 'House#G/722/724, Ghousia compound, Ghulshah road, Pinjra pol, Hyd, Sindh', 'city': 'Hyderabad', 'country': '', 'agency_type': 'full', 'discount_group_id': '699a3312a2dfac3e1634744f', 'credit_limit': 1000.0, 'is_active': True, 'updated_at': datetime.datetime(2026, 2, 26, 21, 0, 6, 652001)}
+
+[2026-02-26 21:24:07.595938] Updating umrah_bookings 69a0b9d894c10e7ebaf2ead5 with {'payment_method': 'bank', 'payment_status': 'pending', 'updated_at': datetime.datetime(2026, 2, 26, 21, 24, 7, 595599)}
