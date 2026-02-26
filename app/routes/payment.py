@@ -903,6 +903,7 @@ async def create_payment(
             "status": "approved",
             "payment_date": payment_dict.get('payment_date'),
             "created_at": payment_dict.get('created_at'),
+            "updated_at": payment_dict.get('updated_at', payment_dict.get('created_at')),
         }
 
     # Allow manual deposits even if no booking ID exists natively.
@@ -994,7 +995,7 @@ async def update_payment_status(
         
     updated_payment = await db_ops.update(Collections.PAYMENTS, payment_id, update_data)
     
-    # If payment is approved, we should also update the booking
+    # If payment is approved, we should also update the booking and create journal
     if new_status == 'approved':
         col_name = None
         b_type = payment.get('booking_type')
@@ -1006,10 +1007,32 @@ async def update_payment_status(
             col_name = Collections.CUSTOM_BOOKINGS
             
         if col_name:
-            await db_ops.update(col_name, payment.get('booking_id'), {
-                "payment_status": "paid",
-                "paid_amount": payment.get('amount'),
-                "booking_status": "confirmed"
-            })
+            booking = await db_ops.get_by_id(col_name, payment.get('booking_id'))
+            if booking:
+                new_paid_amount = float(booking.get('paid_amount', 0)) + float(payment.get('amount', 0))
+                total_amount = float(booking.get('grand_total') or booking.get('total_amount') or 0)
+                
+                payment_status = "paid" if new_paid_amount >= total_amount else "partial"
+                
+                await db_ops.update(col_name, payment.get('booking_id'), {
+                    "payment_status": payment_status,
+                    "paid_amount": new_paid_amount,
+                    "booking_status": "confirmed" if payment_status == "paid" else "underprocess"
+                })
+                
+                from app.finance.journal_engine import create_payment_received_journal
+                try:
+                    await create_payment_received_journal(
+                        booking_reference=booking.get('booking_reference', payment.get('booking_id')),
+                        amount=float(payment.get('amount', 0)),
+                        payment_method=payment.get('payment_method', 'bank'),
+                        agency_name=payment.get('agent_name', 'Agency'),
+                        organization_id=payment.get('organization_id'),
+                        branch_id=payment.get('branch_id'),
+                        agency_id=payment.get('agency_id'),
+                        created_by=current_user.get('email') or current_user.get('username') or "System"
+                    )
+                except Exception as je:
+                    print(f"⚠️  Journal engine warning for payment approval {payment_id}: {je}")
             
     return serialize_doc(updated_payment)

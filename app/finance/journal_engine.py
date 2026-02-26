@@ -331,6 +331,162 @@ def _calculate_booking_pnl(booking: Dict) -> (float, float):
     return selling_total, purchasing
 
 
+# ─── Ticket booking journal ──────────────────────────────────────────────────────
+
+async def create_ticket_booking_journal(
+    booking: Dict,
+    organization_id: Optional[str],
+    branch_id: Optional[str],
+    agency_id: Optional[str],
+    created_by: str,
+):
+    """
+    Auto journal for a Ticket booking:
+    DR  Accounts Receivable (Agency)      selling_total
+    CR  Ticket Revenue                    selling_total
+
+    DR  Cost of Sales                     purchasing_total
+    CR  Supplier Payable                  purchasing_total
+    """
+    selling_total = float(booking.get("grand_total") or booking.get("total_amount") or 0)
+    
+    purchasing_total = 0.0
+    passengers = booking.get("passengers", [])
+    ticket_details = booking.get("ticket_details", {})
+    if ticket_details:
+        purchasing_total += float(ticket_details.get("adult_purchasing") or 0) * sum(1 for p in passengers if p.get("type", "").lower() == "adult")
+        purchasing_total += float(ticket_details.get("child_purchasing") or 0) * sum(1 for p in passengers if p.get("type", "").lower() == "child")
+        purchasing_total += float(ticket_details.get("infant_purchasing") or 0) * sum(1 for p in passengers if p.get("type", "").lower() == "infant")
+    
+    ar_acct   = await _resolve_account(organization_id, "Accounts Receivable")
+    rev_acct  = await _resolve_account(organization_id, "Ticket Revenue")
+    cos_acct  = await _resolve_account(organization_id, "Cost of Sales")
+    sup_acct  = await _resolve_account(organization_id, "Supplier Payable")
+
+    if not all([ar_acct, rev_acct, cos_acct, sup_acct]):
+        missing = [name for name, acct in [("Accounts Receivable", ar_acct), ("Ticket Revenue", rev_acct), ("Cost of Sales", cos_acct), ("Supplier Payable", sup_acct)] if not acct]
+        raise ValueError(f"Missing COA accounts for ticket journal: {missing}.")
+
+    agency_name = (booking.get("agency_details") or {}).get("name", "Agency")
+    ref         = booking.get("booking_reference", "")
+
+    revenue_entries = [
+        {
+            "account_id":   ar_acct["_id"],
+            "account_code": ar_acct.get("code"),
+            "account_name": ar_acct.get("name"),
+            "debit":        selling_total,
+            "credit":       0.0,
+            "description":  f"Receivable – {agency_name}",
+        },
+        {
+            "account_id":   rev_acct["_id"],
+            "account_code": rev_acct.get("code"),
+            "account_name": rev_acct.get("name"),
+            "debit":        0.0,
+            "credit":       selling_total,
+            "description":  f"Ticket Revenue – {ref}",
+        },
+    ]
+
+    await create_journal_entry(
+        reference_type="ticket_booking",
+        reference_id=ref,
+        description=f"Ticket booking – {agency_name} – {ref}",
+        entries=revenue_entries,
+        organization_id=organization_id,
+        branch_id=branch_id,
+        agency_id=agency_id,
+        created_by=created_by,
+    )
+
+    if purchasing_total > 0:
+        cost_entries = [
+            {
+                "account_id":   cos_acct["_id"],
+                "account_code": cos_acct.get("code"),
+                "account_name": cos_acct.get("name"),
+                "debit":        purchasing_total,
+                "credit":       0.0,
+                "description":  f"Cost of Sales – {ref}",
+            },
+            {
+                "account_id":   sup_acct["_id"],
+                "account_code": sup_acct.get("code"),
+                "account_name": sup_acct.get("name"),
+                "debit":        0.0,
+                "credit":       purchasing_total,
+                "description":  f"Supplier Payable – {ref}",
+            },
+        ]
+        await create_journal_entry(
+            reference_type="ticket_booking",
+            reference_id=ref,
+            description=f"Cost of Sales – {agency_name} – {ref}",
+            entries=cost_entries,
+            organization_id=organization_id,
+            branch_id=branch_id,
+            agency_id=agency_id,
+            created_by=created_by,
+        )
+
+# ─── Custom booking journal ────────────────────────────────────────────────────
+
+async def create_custom_booking_journal(
+    booking: Dict,
+    organization_id: Optional[str],
+    branch_id: Optional[str],
+    agency_id: Optional[str],
+    created_by: str,
+):
+    """
+    Auto journal for a Custom Package booking:
+    DR  Accounts Receivable (Agency)      selling_total
+    CR  Custom Revenue                    selling_total
+    """
+    selling_total = float(booking.get("total_amount") or 0)
+    
+    ar_acct   = await _resolve_account(organization_id, "Accounts Receivable")
+    rev_acct  = await _resolve_account(organization_id, "Custom Revenue")
+
+    if not all([ar_acct, rev_acct]):
+        missing = [name for name, acct in [("Accounts Receivable", ar_acct), ("Custom Revenue", rev_acct)] if not acct]
+        raise ValueError(f"Missing COA accounts for custom journal: {missing}.")
+        
+    agency_name = (booking.get("agency_details") or {}).get("name", "Agency")
+    ref         = booking.get("booking_reference", "")
+
+    revenue_entries = [
+        {
+            "account_id":   ar_acct["_id"],
+            "account_code": ar_acct.get("code"),
+            "account_name": ar_acct.get("name"),
+            "debit":        selling_total,
+            "credit":       0.0,
+            "description":  f"Receivable – {agency_name}",
+        },
+        {
+            "account_id":   rev_acct["_id"],
+            "account_code": rev_acct.get("code"),
+            "account_name": rev_acct.get("name"),
+            "debit":        0.0,
+            "credit":       selling_total,
+            "description":  f"Custom Revenue – {ref}",
+        },
+    ]
+
+    await create_journal_entry(
+        reference_type="custom_booking",
+        reference_id=ref,
+        description=f"Custom booking – {agency_name} – {ref}",
+        entries=revenue_entries,
+        organization_id=organization_id,
+        branch_id=branch_id,
+        agency_id=agency_id,
+        created_by=created_by,
+    )
+
+
 # ─── Payment received journal ──────────────────────────────────────────────────
 
 async def create_payment_received_journal(

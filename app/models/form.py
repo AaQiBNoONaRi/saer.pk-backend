@@ -65,6 +65,7 @@ class FormBase(BaseModel):
     form_schema: Optional[FormSchema] = Field(default=None, alias="schema")
     autoUrl: Optional[str] = None
     linkBlog: bool = False
+    linked_blog_id: Optional[str] = None
     position: str = "End of Blog (Below Content)"  # Position for blog-linked forms
 
 class FormCreate(FormBase):
@@ -77,6 +78,7 @@ class FormUpdate(BaseModel):
     form_schema: Optional[FormSchema] = Field(default=None, alias="schema")
     autoUrl: Optional[str] = None
     linkBlog: Optional[bool] = None
+    linked_blog_id: Optional[str] = None
     position: Optional[str] = None
 
 class FormResponse(BaseModel):
@@ -87,6 +89,7 @@ class FormResponse(BaseModel):
     form_schema: Optional[FormSchema] = Field(default=None, alias="schema")
     autoUrl: Optional[str] = None
     linkBlog: bool = False
+    linked_blog_id: Optional[str] = None
     position: str = "End of Blog (Below Content)"
     submissions: int = 0
     created_at: Optional[datetime] = None

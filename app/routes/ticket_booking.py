@@ -13,6 +13,7 @@ from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from app.finance.journal_engine import create_ticket_booking_journal
 from bson import ObjectId
 
 # ── Inline Pydantic models (booking.py was removed) ──────────────────────────
@@ -179,6 +180,38 @@ async def create_ticket_booking(
     # Create booking in TICKET_BOOKINGS collection
     created_booking = await db_ops.create(Collections.TICKET_BOOKINGS, booking_dict)
     
+    # ── Auto-generate double-entry journal ──────────────────────────────────
+    try:
+        await create_ticket_booking_journal(
+            booking=serialize_doc(created_booking),
+            organization_id=org_id,
+            branch_id=branch_id,
+            agency_id=agency_id,
+            created_by=booking_dict['created_by'],
+        )
+    except Exception as je:
+        print(f"⚠️  Journal engine warning for {created_booking.get('booking_reference')}: {je}")
+        
+    # ── Auto-create pending payment for bank/cash ───────────────────────────
+    pmt_method = booking_dict.get("payment_method")
+    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online"]:
+        payment_doc = {
+            "booking_id": str(created_booking.get('_id')),
+            "booking_type": "ticket",
+            "payment_method": pmt_method,
+            "amount": float(booking_dict.get('grand_total') or booking_dict.get('total_amount') or 0),
+            "payment_date": booking_dict['created_at'],
+            "status": "pending",
+            "agency_id": agency_id,
+            "branch_id": branch_id,
+            "organization_id": org_id,
+            "agent_name": booking_dict.get('agent_name'),
+            "created_by": booking_dict['created_by'],
+            "created_at": booking_dict['created_at'],
+            "updated_at": booking_dict['created_at'],
+        }
+        await db_ops.create(Collections.PAYMENTS, payment_doc)
+
     # Update flight inventory - reduce available seats
     new_available_seats = available_seats - booking.total_passengers
     await db_ops.update(

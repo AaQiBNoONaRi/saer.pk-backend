@@ -4,10 +4,12 @@ Form routes - CRUD operations
 from fastapi import APIRouter, HTTPException, status, Depends
 from typing import List
 from app.models.form import FormCreate, FormUpdate, FormResponse
+from app.models.form_submission import FormSubmissionCreate, FormSubmissionResponse
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from datetime import datetime
 
 router = APIRouter(prefix="/forms", tags=["Forms"])
 
@@ -83,3 +85,63 @@ async def delete_form(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Form not found"
         )
+
+# ─── Public Endpoints (No Auth Required) ──────────────────────────────────────
+
+@router.get("/public/getByAutoUrl", response_model=FormResponse)
+async def get_form_by_url(autoUrl: str):
+    """Get active form by its autoUrl for standalone public pages"""
+    form = await db_ops.get_one(Collections.FORMS, {"autoUrl": autoUrl, "status": "active"})
+    if not form:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Form not found or is inactive"
+        )
+    return serialize_doc(form)
+
+@router.get("/public/getByBlog/{blog_id}", response_model=List[FormResponse])
+async def get_forms_by_blog(blog_id: str):
+    """Get active forms linked to a specific blog post"""
+    forms = await db_ops.get_all(Collections.FORMS, {"linked_blog_id": blog_id, "status": "active", "linkBlog": True})
+    return serialize_docs(forms)
+
+@router.post("/public/{form_id}/submit", response_model=FormSubmissionResponse, status_code=status.HTTP_201_CREATED)
+async def submit_form(form_id: str, submission: FormSubmissionCreate):
+    """Submit a form response"""
+    # Verify form exists and is active
+    form = await db_ops.get_by_id(Collections.FORMS, form_id)
+    if not form or form.get("status") != "active":
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Form not found or is inactive"
+        )
+
+    # Save submission
+    sub_dict = submission.model_dump()
+    sub_dict["submitted_at"] = datetime.utcnow()
+    
+    # Ensure form_id is correctly mapped from path if needed, though Pydantic should have it
+    sub_dict["form_id"] = form_id
+
+    created_sub = await db_ops.create(Collections.FORM_SUBMISSIONS, sub_dict)
+    
+    # Increment submission count on the form document
+    current_count = form.get("submissions", 0)
+    await db_ops.update(Collections.FORMS, form_id, {"submissions": current_count + 1})
+    
+    return serialize_doc(created_sub)
+
+# ─── Admin Submissions View ───────────────────────────────────────────────────
+
+@router.get("/{form_id}/submissions", response_model=List[FormSubmissionResponse])
+async def get_form_submissions(
+    form_id: str,
+    skip: int = 0,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get submissions for a specific form (Admin only)"""
+    subs = await db_ops.get_all(Collections.FORM_SUBMISSIONS, {"form_id": form_id}, skip=skip, limit=limit)
+    # Sort newest first
+    subs.sort(key=lambda x: x.get("submitted_at", ""), reverse=True)
+    return serialize_docs(subs)

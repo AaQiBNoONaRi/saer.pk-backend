@@ -280,6 +280,115 @@ async def get_ledger(
         return {"rows": tb["rows"], "generated_at": datetime.utcnow().isoformat()}
 
 
+# ─── Agency Statement (agency's own perspective) ───────────────────────────────
+
+async def get_agency_statement(
+    agency_id: str,
+    organization_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    limit: int = 200,
+) -> Dict:
+    """
+    All journal entries scoped to this agency, from the agency perspective:
+      - booking journals   → amount billed (shown as 'Amount Owed')
+      - payment_received   → amount paid   (shown as 'Amount Paid')
+    Balance starts at 0; bookings add to it; payments reduce it.
+    A positive running_balance means the agency still owes that amount.
+    """
+    coll = db_config.get_collection(Collections.JOURNAL_ENTRIES)
+    match: Dict = {"is_reversed": {"$ne": True}, "agency_id": agency_id}
+    if organization_id:
+        match["organization_id"] = organization_id
+    dm = _date_match(date_from, date_to)
+    match.update(dm)
+
+    pipeline = [
+        {"$match": match},
+        {"$sort": {"date": 1, "created_at": 1}},
+        {"$limit": limit},
+        {"$project": {
+            "date": 1,
+            "reference_type": 1,
+            "reference_id": 1,
+            "description": 1,
+            "entries": 1,
+        }},
+    ]
+    docs = await coll.aggregate(pipeline).to_list(length=limit)
+
+    rows = []
+    running_balance = 0.0
+
+    for doc in docs:
+        ref_type = doc.get("reference_type", "")
+        ref_id   = doc.get("reference_id", "")
+        desc     = doc.get("description", "")
+        date_val = doc.get("date", "")
+        entries  = doc.get("entries", [])
+
+        if ref_type in ("ticket_booking", "umrah_booking", "custom_booking"):
+            # Amount billed to agency — increases their outstanding balance
+            amount = sum(float(e.get("debit", 0)) for e in entries if float(e.get("debit", 0)) > 0)
+            if amount:
+                running_balance += amount
+                rows.append({
+                    "date": date_val,
+                    "reference_type": ref_type,
+                    "reference_id": ref_id,
+                    "description": desc,
+                    "entry_desc": next(
+                        (e.get("description") for e in entries if float(e.get("debit", 0)) > 0),
+                        desc
+                    ),
+                    "amount_owed": round(amount, 2),
+                    "amount_paid": 0.0,
+                    "balance": round(running_balance, 2),
+                })
+        elif ref_type == "payment_received":
+            # Agency payment received — decreases their outstanding balance
+            amount = sum(float(e.get("credit", 0)) for e in entries if float(e.get("credit", 0)) > 0)
+            if amount:
+                running_balance -= amount
+                rows.append({
+                    "date": date_val,
+                    "reference_type": ref_type,
+                    "reference_id": ref_id,
+                    "description": desc,
+                    "entry_desc": next(
+                        (e.get("description") for e in entries if float(e.get("credit", 0)) > 0),
+                        desc
+                    ),
+                    "amount_owed": 0.0,
+                    "amount_paid": round(amount, 2),
+                    "balance": round(running_balance, 2),
+                })
+        else:
+            # Generic fallback
+            net = sum(float(e.get("debit", 0)) - float(e.get("credit", 0)) for e in entries)
+            if net:
+                running_balance += net
+                rows.append({
+                    "date": date_val,
+                    "reference_type": ref_type,
+                    "reference_id": ref_id,
+                    "description": desc,
+                    "entry_desc": desc,
+                    "amount_owed": round(max(net, 0), 2),
+                    "amount_paid": round(max(-net, 0), 2),
+                    "balance": round(running_balance, 2),
+                })
+
+    return {
+        "agency_id": agency_id,
+        "total_owed": round(sum(r["amount_owed"] for r in rows), 2),
+        "total_paid": round(sum(r["amount_paid"] for r in rows), 2),
+        "current_balance": round(running_balance, 2),
+        "rows": rows,
+        "generated_at": datetime.utcnow().isoformat(),
+    }
+
+
 # ─── Dashboard KPIs ────────────────────────────────────────────────────────────
 
 async def get_dashboard_kpis(

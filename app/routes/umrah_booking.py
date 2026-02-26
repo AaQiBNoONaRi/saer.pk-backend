@@ -293,6 +293,26 @@ async def create_umrah_booking(
         # Journal failure must NOT block the booking – log and continue
         print(f"⚠️  Journal engine warning for {created.get('booking_reference')}: {je}")
 
+    # ── Auto-create pending payment for bank/cash ───────────────────────────
+    pmt_method = booking_dict.get("payment_method")
+    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online"]:
+        payment_doc = {
+            "booking_id": str(created.get('_id')),
+            "booking_type": "umrah",
+            "payment_method": pmt_method,
+            "amount": float(booking_dict.get('total_amount') or 0),
+            "payment_date": booking_dict['created_at'],
+            "status": "pending",
+            "agency_id": agency_id,
+            "branch_id": branch_id,
+            "organization_id": org_id,
+            "agent_name": booking_dict.get('agent_name'),
+            "created_by": booking_dict['created_by'],
+            "created_at": booking_dict['created_at'],
+            "updated_at": booking_dict['created_at'],
+        }
+        await db_ops.create(Collections.PAYMENTS, payment_doc)
+
     return created
 
 @router.get("/")

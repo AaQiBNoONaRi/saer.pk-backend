@@ -11,6 +11,7 @@ from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from app.finance.journal_engine import create_custom_booking_journal
 
 router = APIRouter(prefix="/custom-bookings", tags=["Custom Bookings"])
 
@@ -282,6 +283,39 @@ async def create_custom_booking(
     booking_dict['voucher_status'] = 'Draft'
 
     created = await db_ops.create(Collections.CUSTOM_BOOKINGS, booking_dict)
+    
+    # ── Auto-generate double-entry journal ──────────────────────────────────
+    try:
+        await create_custom_booking_journal(
+            booking=serialize_doc(created),
+            organization_id=org_id,
+            branch_id=branch_id,
+            agency_id=agency_id,
+            created_by=booking_dict['created_by'],
+        )
+    except Exception as je:
+        print(f"⚠️  Journal engine warning for {created.get('booking_reference')}: {je}")
+        
+    # ── Auto-create pending payment for bank/cash ───────────────────────────
+    pmt_method = booking_dict.get("payment_method")
+    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online"]:
+        payment_doc = {
+            "booking_id": str(created.get('_id')),
+            "booking_type": "custom",
+            "payment_method": pmt_method,
+            "amount": float(booking_dict.get('grand_total') or booking_dict.get('total_amount') or 0),
+            "payment_date": booking_dict['created_at'],
+            "status": "pending",
+            "agency_id": agency_id,
+            "branch_id": branch_id,
+            "organization_id": org_id,
+            "agent_name": booking_dict.get('agent_name'),
+            "created_by": booking_dict['created_by'],
+            "created_at": booking_dict['created_at'],
+            "updated_at": booking_dict['created_at'],
+        }
+        await db_ops.create(Collections.PAYMENTS, payment_doc)
+        
     return serialize_doc(created)
 
 
