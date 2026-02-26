@@ -59,9 +59,10 @@ class FormStatus(str, Enum):
     INACTIVE = "inactive"
 
 class FormBase(BaseModel):
+    model_config = {"extra": "allow", "populate_by_name": True}
     name: str = Field(..., min_length=1, max_length=200)
     status: FormStatus = FormStatus.ACTIVE
-    schema: FormSchema
+    form_schema: Optional[FormSchema] = Field(default=None, alias="schema")
     autoUrl: Optional[str] = None
     linkBlog: bool = False
     linked_blog_id: Optional[str] = None
@@ -71,29 +72,25 @@ class FormCreate(FormBase):
     pass
 
 class FormUpdate(BaseModel):
+    model_config = {"extra": "allow", "populate_by_name": True}
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     status: Optional[FormStatus] = None
-    schema: Optional[FormSchema] = None
+    form_schema: Optional[FormSchema] = Field(default=None, alias="schema")
     autoUrl: Optional[str] = None
     linkBlog: Optional[bool] = None
     linked_blog_id: Optional[str] = None
     position: Optional[str] = None
 
 class FormResponse(BaseModel):
+    model_config = {"populate_by_name": True, "arbitrary_types_allowed": True, "extra": "allow"}
     id: str = Field(alias="_id")
     name: str
     status: FormStatus
-    schema: FormSchema
+    form_schema: Optional[FormSchema] = Field(default=None, alias="schema")
     autoUrl: Optional[str] = None
     linkBlog: bool = False
     linked_blog_id: Optional[str] = None
     position: str = "End of Blog (Below Content)"
     submissions: int = 0
-    created_at: datetime
-    updated_at: datetime
-    
-    class Config:
-        populate_by_name = True
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

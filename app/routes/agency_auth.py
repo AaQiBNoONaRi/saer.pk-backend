@@ -11,7 +11,7 @@ from app.utils.helpers import serialize_doc
 router = APIRouter(prefix="/agencies", tags=["Agency Authentication"])
 
 class AgencyLogin(BaseModel):
-    email: EmailStr
+    username: str # Can be email or username
     password: str
 
 @router.post("/login")
@@ -21,15 +21,27 @@ async def agency_login(credentials: AgencyLogin):
     Authenticates agency users and returns access token
     """
     try:
-        # Find agency by email
-        agency = await db_ops.get_one(Collections.AGENCIES, {"email": credentials.email})
+        # Find agency by email or username
+        agency = await db_ops.get_one(Collections.AGENCIES, {
+            "$or": [
+                {"email": credentials.username},
+                {"username": credentials.username}
+            ]
+        })
         
         if not agency:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password"
+                detail="Invalid username or password"
             )
         
+        # Check if portal access is enabled
+        if not agency.get("portal_access_enabled", True):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Portal access is disabled for this agency"
+            )
+
         # Check if agency is active
         if not agency.get("is_active", True):
             raise HTTPException(

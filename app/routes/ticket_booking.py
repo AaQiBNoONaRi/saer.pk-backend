@@ -14,6 +14,7 @@ from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
 from app.finance.journal_engine import create_ticket_booking_journal
+from bson import ObjectId
 
 # ── Inline Pydantic models (booking.py was removed) ──────────────────────────
 
@@ -64,15 +65,27 @@ class BookingCreate(BaseModel):
     organization_details: Optional[Dict[str, Any]] = None
 
 class BookingUpdate(BaseModel):
+    model_config = {"extra": "allow"}
     booking_status: Optional[str] = None
     payment_method: Optional[str] = None
     payment_status: Optional[str] = None
     paid_amount: Optional[float] = None
+    discount: Optional[float] = None
+    child_price: Optional[float] = None
+    infant_price: Optional[float] = None
     payment_details: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
 
 class BookingResponse(BaseModel):
-    model_config = {"arbitrary_types_allowed": True, "extra": "allow"}
+    id: Optional[str] = Field(None, alias="_id")
+    booking_reference: Optional[str] = None
+    booking_status: Optional[str] = None
+    payment_status: Optional[str] = None
+    
+    class Config:
+        arbitrary_types_allowed = True
+        extra = "allow"
+        populate_by_name = True
 
 router = APIRouter(prefix="/ticket-bookings", tags=["Ticket Bookings"])
 
@@ -82,7 +95,7 @@ def generate_booking_reference():
     random_str = ''.join(random.choices(string.ascii_uppercase + string.digits, k=4))
     return f"TB-{timestamp}-{random_str}"
 
-@router.post("/", response_model=BookingResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_ticket_booking(
     booking: BookingCreate,
     current_user: dict = Depends(get_current_user)
@@ -129,6 +142,20 @@ async def create_ticket_booking(
         current_user.get('branch_name') or
         current_user.get('email', 'Unknown')
     )
+
+    # ── Record Booker Identity ──
+    booking_dict['booked_by_role'] = role
+    booking_dict['booked_by_id'] = current_user.get('sub')
+    booking_dict['booked_by_name'] = (
+        current_user.get('name') or 
+        current_user.get('agency_name') or 
+        current_user.get('branch_name') or 
+        current_user.get('email', 'Unknown')
+    )
+
+    # ── If branch books directly, ensure agency_id is null ──
+    if role == 'branch':
+        booking_dict['agency_id'] = None
 
     # ── fetch & embed full hierarchy documents (strip passwords) ──
     if agency_id:
@@ -195,7 +222,7 @@ async def create_ticket_booking(
     
     return serialize_doc(created_booking)
 
-@router.get("/", response_model=List[BookingResponse])
+@router.get("/")
 async def get_ticket_bookings(
     booking_status: Optional[str] = None,
     payment_status: Optional[str] = None,
@@ -217,6 +244,8 @@ async def get_ticket_bookings(
     elif role == 'branch' or entity_type == 'branch':
         bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['branch_id'] = bid
+        # Only show bookings made directly by the branch
+        filter_query['booked_by_role'] = 'branch'
     
     if booking_status:
         filter_query['booking_status'] = booking_status
@@ -228,7 +257,7 @@ async def get_ticket_bookings(
     bookings = await db_ops.get_all(Collections.TICKET_BOOKINGS, filter_query, skip=skip, limit=limit)
     return serialize_docs(bookings)
 
-@router.get("/{booking_id}", response_model=BookingResponse)
+@router.get("/{booking_id}")
 async def get_ticket_booking(
     booking_id: str,
     current_user: dict = Depends(get_current_user)
@@ -250,13 +279,15 @@ async def get_ticket_booking(
     
     return serialize_doc(booking)
 
-@router.put("/{booking_id}", response_model=BookingResponse)
+@router.put("/{booking_id}")
 async def update_ticket_booking(
     booking_id: str,
     booking_update: BookingUpdate,
     current_user: dict = Depends(get_current_user)
 ):
-    """Update ticket booking details"""
+    """Update ticket booking status/details — direct MongoDB update, no pre-GET needed."""
+    from datetime import datetime
+
     update_data = booking_update.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -281,6 +312,32 @@ async def update_ticket_booking(
         raise HTTPException(status_code=404, detail="Ticket booking not found")
     
     return serialize_doc(updated_booking)
+
+    update_data["updated_at"] = datetime.utcnow()
+
+    # Use the collection directly to avoid any db_ops wrapper issues
+    try:
+        oid = ObjectId(booking_id)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid booking ID format or server error: {str(e)}"
+        )
+
+    from app.config.database import db_config as _db_config
+    collection = _db_config.get_collection(Collections.TICKET_BOOKINGS)
+
+    result = await collection.find_one_and_update(
+        {"_id": oid},
+        {"$set": update_data},
+        return_document=True
+    )
+
+    if result is None:
+        raise HTTPException(status_code=404, detail="Ticket booking not found in database")
+
+    return serialize_doc(result)
+
 
 @router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def cancel_ticket_booking(

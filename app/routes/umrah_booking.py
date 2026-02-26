@@ -52,6 +52,7 @@ class PassengerData(BaseModel):
     shirka: Optional[str] = None
 
 class RoomSelection(BaseModel):
+    model_config = {"extra": "allow"}
     room_type: str   # sharing|quint|quad|triple|double
     quantity: int
     price_per_person: float
@@ -67,6 +68,7 @@ class RoomSelection(BaseModel):
     hotel_brn: Optional[str] = None
 
 class UmrahBookingCreate(BaseModel):
+    model_config = {"extra": "allow"}
     package_id: str
     package_details: Optional[Dict[str, Any]] = None   # full package object (includes flight, hotels, transport, prices)
     rooms_selected: List[RoomSelection] = []
@@ -86,8 +88,14 @@ class UmrahBookingCreate(BaseModel):
     agency_details: Optional[Dict[str, Any]] = None
     branch_details: Optional[Dict[str, Any]] = None
     organization_details: Optional[Dict[str, Any]] = None
+    # ── Food & Ziyarat vouchers ──
+    food_voucher_number: Optional[str] = None
+    food_brn: Optional[str] = None
+    ziyarat_voucher_number: Optional[str] = None
+    ziyarat_brn: Optional[str] = None
 
 class UmrahBookingUpdate(BaseModel):
+    model_config = {"extra": "allow"}
     booking_status: Optional[str] = None
     voucher_status: Optional[str] = None
     payment_method: Optional[str] = None
@@ -97,9 +105,14 @@ class UmrahBookingUpdate(BaseModel):
     passengers: Optional[List[PassengerData]] = None
     rooms_selected: Optional[List[RoomSelection]] = None
     shirka: Optional[str] = None
+    package_details: Optional[Dict[str, Any]] = None
     # ── Transport voucher — filled during order delivery ──
     transport_voucher_number: Optional[str] = None
     transport_brn: Optional[str] = None
+    food_voucher_number: Optional[str] = None
+    food_brn: Optional[str] = None
+    ziyarat_voucher_number: Optional[str] = None
+    ziyarat_brn: Optional[str] = None
 
 PASSPORT_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "passports")
 os.makedirs(PASSPORT_UPLOAD_DIR, exist_ok=True)
@@ -163,6 +176,20 @@ async def create_umrah_booking(
         current_user.get('email', 'Unknown')
     )
 
+    # ── Record Booker Identity ──
+    booking_dict['booked_by_role'] = role
+    booking_dict['booked_by_id'] = current_user.get('sub')
+    booking_dict['booked_by_name'] = (
+        current_user.get('name') or 
+        current_user.get('agency_name') or 
+        current_user.get('branch_name') or 
+        current_user.get('email', 'Unknown')
+    )
+
+    # ── If branch books directly, ensure agency_id is null ──
+    if role == 'branch':
+        booking_dict['agency_id'] = None
+
     # ── fetch & embed full hierarchy documents (strip password fields) ──
     if agency_id:
         agency_doc = await db_ops.get_by_id(Collections.AGENCIES, agency_id)
@@ -183,13 +210,72 @@ async def create_umrah_booking(
         if org_doc:
             booking_dict['organization_details'] = serialize_doc(org_doc)
 
-    # ── resolve flight ID → full flight doc so pricing is always available ──
+    # ── resolve flight ID → full flight doc ──
     pkg_details = booking_dict.get('package_details') or {}
     flight_ref = pkg_details.get('flight')
     if isinstance(flight_ref, str) and flight_ref:
         flight_doc = await db_ops.get_by_id(Collections.FLIGHTS, flight_ref)
         if flight_doc:
             booking_dict['package_details']['flight'] = serialize_doc(flight_doc)
+
+    # ── resolve transport ID → full transport doc ──
+    transport_ref = pkg_details.get('transport')
+    if isinstance(transport_ref, str) and transport_ref:
+        transport_doc = await db_ops.get_by_id(Collections.TRANSPORT, transport_ref)
+        if transport_doc:
+            transport_obj = serialize_doc(transport_doc)
+        else:
+            transport_obj = {'id': transport_ref}
+        transport_obj.setdefault('brn', None)
+        transport_obj.setdefault('voucher_no', None)
+        booking_dict['package_details']['transport'] = transport_obj
+    elif isinstance(transport_ref, dict):
+        booking_dict['package_details']['transport'].setdefault('brn', None)
+        booking_dict['package_details']['transport'].setdefault('voucher_no', None)
+
+    # ── resolve food ID → full food doc ──
+    food_ref = pkg_details.get('food') or pkg_details.get('fooding')
+    food_key = 'food' if 'food' in pkg_details else ('fooding' if 'fooding' in pkg_details else 'food')
+    if isinstance(food_ref, str) and food_ref:
+        food_doc = await db_ops.get_by_id(Collections.FOOD_PRICES, food_ref)
+        if food_doc:
+            food_obj = serialize_doc(food_doc)
+        else:
+            food_obj = {'id': food_ref}
+        food_obj.setdefault('brn', None)
+        food_obj.setdefault('voucher_no', None)
+        booking_dict['package_details'][food_key] = food_obj
+    elif isinstance(food_ref, dict):
+        booking_dict['package_details'][food_key].setdefault('brn', None)
+        booking_dict['package_details'][food_key].setdefault('voucher_no', None)
+
+    # ── resolve ziyarat ID → full ziyarat doc ──
+    ziyarat_ref = pkg_details.get('ziyarat') or pkg_details.get('ziarat')
+    ziyarat_key = 'ziyarat' if 'ziyarat' in pkg_details else ('ziarat' if 'ziarat' in pkg_details else 'ziyarat')
+    if isinstance(ziyarat_ref, str) and ziyarat_ref:
+        ziyarat_doc = await db_ops.get_by_id(Collections.ZIARAT_PRICES, ziyarat_ref)
+        if ziyarat_doc:
+            ziyarat_obj = serialize_doc(ziyarat_doc)
+        else:
+            ziyarat_obj = {'id': ziyarat_ref}
+        ziyarat_obj.setdefault('brn', None)
+        ziyarat_obj.setdefault('voucher_no', None)
+        booking_dict['package_details'][ziyarat_key] = ziyarat_obj
+    elif isinstance(ziyarat_ref, dict):
+        booking_dict['package_details'][ziyarat_key].setdefault('brn', None)
+        booking_dict['package_details'][ziyarat_key].setdefault('voucher_no', None)
+
+    # ── Initialize top-level voucher fields for order delivery ──
+    booking_dict['transport_brn'] = None
+    booking_dict['transport_voucher_number'] = None
+    booking_dict['food_brn'] = None
+    booking_dict['food_voucher_number'] = None
+    booking_dict['ziyarat_brn'] = None
+    booking_dict['ziyarat_voucher_number'] = None
+    booking_dict['hotel_brn'] = None
+    booking_dict['hotel_voucher_number'] = None
+    booking_dict['shirka'] = None
+    booking_dict['voucher_status'] = 'Draft'
 
     created_booking = await db_ops.create(Collections.UMRAH_BOOKINGS, booking_dict)
     created = serialize_doc(created_booking)
@@ -255,6 +341,8 @@ async def get_umrah_bookings(
     elif role == 'branch' or entity_type == 'branch':
         bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['branch_id'] = bid
+        # Only show bookings made directly by the branch
+        filter_query['booked_by_role'] = 'branch'
 
     if booking_status:
         filter_query['booking_status'] = booking_status
@@ -312,12 +400,25 @@ async def update_umrah_booking(
     current_user: dict = Depends(get_current_user)
 ):
     update_data = booking_update.model_dump(exclude_unset=True)
-    print(f"DEBUG: update_umrah_booking update_data: {update_data}")
+    print(f"DEBUG: update_umrah_booking update_data keys: {list(update_data.keys())}")
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
     booking = await db_ops.get_by_id(Collections.UMRAH_BOOKINGS, booking_id)
     if not booking:
         raise HTTPException(status_code=404, detail="Umrah booking not found")
+
+    # ── Expand package_details into dot-notation to do a deep merge ──
+    # This prevents $set from overwriting the entire package_details object.
+    pkg = update_data.pop('package_details', None)
+    if pkg and isinstance(pkg, dict):
+        for sub_key, sub_val in pkg.items():
+            # For nested objects (food, transport, ziyarat), expand further
+            if isinstance(sub_val, dict):
+                for inner_key, inner_val in sub_val.items():
+                    update_data[f'package_details.{sub_key}.{inner_key}'] = inner_val
+            else:
+                update_data[f'package_details.{sub_key}'] = sub_val
+
     updated_booking = await db_ops.update(Collections.UMRAH_BOOKINGS, booking_id, update_data)
     return serialize_doc(updated_booking)
 
