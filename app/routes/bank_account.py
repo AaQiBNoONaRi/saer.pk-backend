@@ -12,6 +12,9 @@ from app.models.bank_account import BankAccountCreate, BankAccountUpdate, BankAc
 from app.utils.auth import get_current_user
 from app.utils.helpers import serialize_doc, serialize_docs
 
+# For COA integration
+from app.finance import services as finance_services
+
 router = APIRouter(
     prefix="/bank-accounts",
     tags=["Bank Accounts"]
@@ -100,6 +103,37 @@ async def create_bank_account(
                  raise HTTPException(status_code=404, detail="Agency not found in this organization")
     
     new_account = await db_ops.create(Collections.BANK_ACCOUNTS, account_dict)
+    
+    # Auto-create COA entry for Organization bank accounts
+    if account.account_type == "Organization":
+        try:
+            # We nest it under '1000' (Assets) or '1002' (Bank Account) if possible.
+            # Find the parent Bank Account COA entry
+            parent_code = "1002"
+            parent = await db_ops.get_one(Collections.CHART_OF_ACCOUNTS, {
+                "organization_id": str(org_id),
+                "code": parent_code
+            })
+            
+            # Generate a new unique code (e.g., 1002-XXXX)
+            unique_suffix = str(new_account["_id"])[-4:].upper()
+            new_code = f"{parent_code}-{unique_suffix}"
+            
+            coa_data = {
+                "code": new_code,
+                "name": f"{account.bank_name} - {account.account_title}",
+                "type": "asset",
+                "parent_id": str(parent["_id"]) if parent else None,
+                "organization_id": str(org_id),
+                "is_active": True,
+                "description": f"Auto-generated for Bank Account: {account.account_number}"
+            }
+            creator_email = current_user.get("email") or current_user.get("username") or "system"
+            await finance_services.create_account(coa_data, creator_email)
+        except Exception as e:
+            # Log error but don't fail the bank account creation
+            print(f"Failed to auto-create COA for bank account: {e}")
+
     return serialize_doc(new_account)
 
 @router.get("/", response_model=List[BankAccountResponse])

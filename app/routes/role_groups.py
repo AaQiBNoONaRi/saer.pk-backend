@@ -29,6 +29,13 @@ def build_module_permissions(module_code, module_label):
         {"code": f"{module_code}.all", "label": f"Full Access to {module_label}"},
     ]
 
+def build_payments_permissions(module_code, module_label):
+    """Build view+add only permissions for payments module"""
+    return [
+        {"code": f"{module_code}.view", "label": f"View {module_label}"},
+        {"code": f"{module_code}.add", "label": f"Add {module_label}"},
+    ]
+
 PERMISSION_CATALOGUE = [
     # 🗂 INVENTORY MODULE
     {
@@ -100,12 +107,10 @@ PERMISSION_CATALOGUE = [
         "icon": "💳",
         "description": "Payment processing & management",
         "subcategories": [
-            {"label": "Add Payment", "permissions": build_module_permissions("payments.add_payment", "Payment Creation")},
-            {"label": "Pending Payments", "permissions": build_module_permissions("payments.pending", "Pending Payments")},
-            {"label": "Vouchers", "permissions": build_module_permissions("payments.vouchers", "Payment Vouchers")},
-            {"label": "Bank Accounts", "permissions": build_module_permissions("payments.bank_accounts", "Bank Accounts")},
-            {"label": "Ledger", "permissions": build_module_permissions("payments.ledger", "Payment Ledger")},
-            {"label": "Booking History", "permissions": build_module_permissions("payments.booking_history", "Booking History")},
+            {"label": "Add Payment", "permissions": build_payments_permissions("payments.add_payment", "Add Payment")},
+            {"label": "Pending Payments", "permissions": build_payments_permissions("payments.pending", "Pending Payments")},
+            {"label": "Vouchers", "permissions": build_payments_permissions("payments.vouchers", "Vouchers")},
+            {"label": "Bank Accounts", "permissions": build_payments_permissions("payments.bank_accounts", "Bank Accounts")},
         ],
     },
     

@@ -51,7 +51,46 @@ async def get_accounts(
         query["is_active"] = is_active
     cursor = coll.find(query).sort("code", 1)
     docs = await cursor.to_list(length=500)
-    return serialize_docs(docs)
+    
+    serialized_docs = serialize_docs(docs)
+    
+    # --- Compute balances for all accounts ---
+    # To do this efficiently, we aggregate the journal entries
+    journal_coll = db_config.get_collection(Collections.JOURNAL_ENTRIES)
+    match_query = {"is_reversed": {"$ne": True}}
+    if organization_id:
+        match_query["organization_id"] = organization_id
+        
+    pipeline = [
+        {"$match": match_query},
+        {"$unwind": "$entries"},
+        {"$group": {
+            "_id": "$entries.account_id",
+            "total_debit": {"$sum": "$entries.debit"},
+            "total_credit": {"$sum": "$entries.credit"}
+        }}
+    ]
+    
+    balances = await journal_coll.aggregate(pipeline).to_list(length=None)
+    balance_map = {str(b["_id"]): b for b in balances if b["_id"]}
+    
+    for doc in serialized_docs:
+        acct_id = str(doc.get("_id") or doc.get("id"))
+        b = balance_map.get(acct_id, {"total_debit": 0, "total_credit": 0})
+        
+        dr = b["total_debit"]
+        cr = b["total_credit"]
+        
+        # Calculate normal balance based on account type
+        acct_type = doc.get("type", "").lower()
+        if acct_type in ["asset", "expense"]:
+            current_balance = dr - cr
+        else: # liability, equity, income
+            current_balance = cr - dr
+            
+        doc["current_balance"] = round(current_balance, 2)
+        
+    return serialized_docs
 
 
 async def update_account(account_id: str, data: Dict, updated_by: str) -> Dict:
@@ -102,6 +141,11 @@ DEFAULT_COA = [
     {"code": "5003", "name": "Rent",                 "type": "expense",   "parent": "5000"},
     {"code": "5004", "name": "Utilities",            "type": "expense",   "parent": "5000"},
     {"code": "5005", "name": "Marketing",            "type": "expense",   "parent": "5000"},
+    # Vendor Payables (sub-accounts of 2001 Supplier Payable)
+    {"code": "2001.1", "name": "Ticket Vendor Payable",  "type": "liability", "parent": "2001"},
+    {"code": "2001.2", "name": "Package Vendor Payable", "type": "liability", "parent": "2001"},
+    {"code": "2001.3", "name": "Hotel Vendor Payable",   "type": "liability", "parent": "2001"},
+    {"code": "2001.4", "name": "Other Vendor Payable",   "type": "liability", "parent": "2001"},
 ]
 
 
@@ -185,6 +229,55 @@ async def _get_account_by_code_in_org(org_id: Optional[str], code: str) -> Optio
     return serialize_doc(doc) if doc else None
 
 
+async def _get_or_create_account(
+    org_id: Optional[str],
+    name: str,
+    acct_type: str,
+    code: str,
+    parent_code: Optional[str],
+    created_by: str,
+) -> Dict:
+    """Find COA account by name+org, or create it automatically."""
+    coll = db_config.get_collection(Collections.CHART_OF_ACCOUNTS)
+    # Try by name first
+    q: Dict[str, Any] = {"name": name, "is_active": True}
+    if org_id:
+        q["organization_id"] = org_id
+    doc = await coll.find_one(q)
+    if doc:
+        return serialize_doc(doc)
+    # Try by code
+    q2: Dict[str, Any] = {"code": code, "is_active": True}
+    if org_id:
+        q2["organization_id"] = org_id
+    doc = await coll.find_one(q2)
+    if doc:
+        return serialize_doc(doc)
+    # Auto-create it
+    parent_id = None
+    if parent_code:
+        parent_q: Dict[str, Any] = {"code": parent_code}
+        if org_id:
+            parent_q["organization_id"] = org_id
+        parent_doc = await coll.find_one(parent_q)
+        if parent_doc:
+            parent_id = str(parent_doc["_id"])
+    new_doc = {
+        "code": code,
+        "name": name,
+        "type": acct_type,
+        "parent_id": parent_id,
+        "organization_id": org_id,
+        "is_active": True,
+        "created_by": created_by,
+        "created_at": datetime.utcnow(),
+        "auto_created": True,
+    }
+    result = await coll.insert_one(new_doc)
+    inserted = await coll.find_one({"_id": result.inserted_id})
+    return serialize_doc(inserted)
+
+
 async def create_manual_entry(data: Dict, created_by: str) -> Dict:
     org_id     = data.get("organization_id")
     entry_type = data.get("entry_type")
@@ -194,7 +287,7 @@ async def create_manual_entry(data: Dict, created_by: str) -> Dict:
 
     defaults = _MANUAL_DEFAULTS.get(entry_type, {"debit": "1001", "credit": "4001"})
 
-    # Resolve debit account
+    # ── Resolve DEBIT (Pay From) account ─────────────────────────────────────
     dr_id = data.get("debit_account_id")
     if dr_id:
         coll = db_config.get_collection(Collections.CHART_OF_ACCOUNTS)
@@ -202,16 +295,58 @@ async def create_manual_entry(data: Dict, created_by: str) -> Dict:
     else:
         dr_doc = await _get_account_by_code_in_org(org_id, defaults["debit"])
 
-    # Resolve credit account
+    # ── Resolve CREDIT (Pay To) account ──────────────────────────────────────
     cr_id = data.get("credit_account_id")
+
     if cr_id:
         coll = db_config.get_collection(Collections.CHART_OF_ACCOUNTS)
         cr_doc = serialize_doc(await coll.find_one({"_id": ObjectId(cr_id)}))
+
+    elif entry_type == ManualEntryType.SALARY:
+        # Auto-create a per-employee salary payable sub-account
+        emp_id = data.get("employee_id")
+        emp_name = data.get("employee_name") or emp_id or "Unknown"
+        # Try to look up employee name from DB if only id given
+        if emp_id and not data.get("employee_name"):
+            from app.config.database import db_config as _db
+            emp_coll = _db.get_collection("employees")
+            emp_doc  = await emp_coll.find_one({"_id": ObjectId(emp_id)}) if ObjectId.is_valid(emp_id) else None
+            if emp_doc:
+                emp_name = emp_doc.get("full_name") or emp_doc.get("name") or emp_id
+        acct_name = f"Salary Payable - {emp_name}"
+        cr_doc = await _get_or_create_account(
+            org_id=org_id,
+            name=acct_name,
+            acct_type="liability",
+            code=f"2003-{(emp_id or 'emp')[:6].upper()}",
+            parent_code="2003",
+            created_by=created_by,
+        )
+
+    elif entry_type == ManualEntryType.VENDOR_BILL:
+        # Auto-resolve vendor payable account by vendor_type
+        VENDOR_MAP = {
+            "ticket":  ("2001.1", "Ticket Vendor Payable"),
+            "package": ("2001.2", "Package Vendor Payable"),
+            "hotel":   ("2001.3", "Hotel Vendor Payable"),
+            "other":   ("2001.4", "Other Vendor Payable"),
+        }
+        vendor_type = (data.get("vendor_type") or "other").lower()
+        code, name = VENDOR_MAP.get(vendor_type, VENDOR_MAP["other"])
+        cr_doc = await _get_or_create_account(
+            org_id=org_id,
+            name=name,
+            acct_type="liability",
+            code=code,
+            parent_code="2001",
+            created_by=created_by,
+        )
+
     else:
         cr_doc = await _get_account_by_code_in_org(org_id, defaults["credit"])
 
     if not dr_doc or not cr_doc:
-        raise ValueError("Could not resolve debit or credit account. Seed COA first.")
+        raise ValueError("Could not resolve debit or credit account. Please seed your Chart of Accounts first.")
 
     entries = [
         {
