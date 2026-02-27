@@ -110,13 +110,26 @@ async def get_bookings(
     """Get all bookings with optional filtering"""
     filter_query = {}
     
-    # Filter by agency/branch
-    if current_user.get('role') == 'agency':
-        aid = current_user.get('agency_id') or current_user.get('sub')
+    role = current_user.get('role', '')
+    entity_type = (current_user.get('entity_type') or '').lower()
+
+    # Filter by agency/branch/org
+    if role in ('organization', 'org', 'admin', 'super_admin') or entity_type in ('organization', 'org'):
+        # Org users see all bookings under their org EXCLUDING those made by child branches/agencies
+        oid = current_user.get('organization_id') or current_user.get('sub')
+        if oid:
+            filter_query['organization_id'] = oid
+            # Ensure it's an organization-level booking (not branch or agency)
+            filter_query['branch_id'] = None
+            filter_query['agency_id'] = None
+    elif role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['agency_id'] = aid
-    elif current_user.get('role') == 'branch':
-        bid = current_user.get('branch_id') or current_user.get('sub')
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['branch_id'] = bid
+        # Only show bookings made directly by the branch
+        filter_query['booked_by_role'] = 'branch'
     
     if booking_status:
         filter_query['booking_status'] = booking_status

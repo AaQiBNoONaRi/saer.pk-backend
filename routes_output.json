@@ -1,0 +1,242 @@
+[
+  {
+    "module": "app.routes.hotel",
+    "name": "get_hotels",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotels/"
+  },
+  {
+    "module": "app.routes.hotel",
+    "name": "create_hotel",
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/hotels/"
+  },
+  {
+    "module": "app.routes.hotel",
+    "name": "get_hotel",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotels/{hotel_id}"
+  },
+  {
+    "module": "app.routes.hotel",
+    "name": "update_hotel",
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/hotels/{hotel_id}"
+  },
+  {
+    "module": "app.routes.hotel",
+    "name": "delete_hotel",
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/hotels/{hotel_id}"
+  },
+  {
+    "module": "app.routes.hotel",
+    "name": "upload_images",
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/hotels/upload-images"
+  },
+  {
+    "module": "app.routes.hotel_category",
+    "name": "create_hotel_category",
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/hotel-categories/"
+  },
+  {
+    "module": "app.routes.hotel_category",
+    "name": "get_hotel_categories",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotel-categories/"
+  },
+  {
+    "module": "app.routes.hotel_category",
+    "name": "get_hotel_category",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotel-categories/{category_id}"
+  },
+  {
+    "module": "app.routes.hotel_category",
+    "name": "update_hotel_category",
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/hotel-categories/{category_id}"
+  },
+  {
+    "module": "app.routes.hotel_category",
+    "name": "delete_hotel_category",
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/hotel-categories/{category_id}"
+  },
+  {
+    "module": "app.routes.hotel_floor",
+    "name": "create_hotel_floor",
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/hotel-floors/"
+  },
+  {
+    "module": "app.routes.hotel_floor",
+    "name": "get_hotel_floors",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotel-floors/"
+  },
+  {
+    "module": "app.routes.hotel_floor",
+    "name": "get_hotel_floor",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotel-floors/{floor_id}"
+  },
+  {
+    "module": "app.routes.hotel_floor",
+    "name": "update_hotel_floor",
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/hotel-floors/{floor_id}"
+  },
+  {
+    "module": "app.routes.hotel_floor",
+    "name": "delete_hotel_floor",
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/hotel-floors/{floor_id}"
+  },
+  {
+    "module": "app.routes.hotel_room",
+    "name": "create_hotel_room",
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/hotel-rooms/"
+  },
+  {
+    "module": "app.routes.hotel_room",
+    "name": "get_hotel_rooms",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotel-rooms/"
+  },
+  {
+    "module": "app.routes.hotel_room",
+    "name": "get_hotel_room",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotel-rooms/{room_id}"
+  },
+  {
+    "module": "app.routes.hotel_room",
+    "name": "update_hotel_room",
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/hotel-rooms/{room_id}"
+  },
+  {
+    "module": "app.routes.hotel_room",
+    "name": "delete_hotel_room",
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/hotel-rooms/{room_id}"
+  },
+  {
+    "module": "app.routes.hotel_room_booking",
+    "name": "create_booking",
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/hotel-bookings/"
+  },
+  {
+    "module": "app.routes.hotel_room_booking",
+    "name": "get_bookings",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/hotel-bookings/"
+  },
+  {
+    "module": "app.routes.hotel_room_booking",
+    "name": "update_booking",
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/hotel-bookings/{booking_id}"
+  },
+  {
+    "module": "app.routes.hotel_room_booking",
+    "name": "delete_booking",
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/hotel-bookings/{booking_id}"
+  },
+  {
+    "module": "app.routes.discounted_hotels",
+    "name": "create_discounted_hotel",
+    "methods": [
+      "POST"
+    ],
+    "path": "/api/discounted-hotels/"
+  },
+  {
+    "module": "app.routes.discounted_hotels",
+    "name": "list_discounted_hotels",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/discounted-hotels/"
+  },
+  {
+    "module": "app.routes.discounted_hotels",
+    "name": "get_discounted_hotel",
+    "methods": [
+      "GET"
+    ],
+    "path": "/api/discounted-hotels/{hotel_id}"
+  },
+  {
+    "module": "app.routes.discounted_hotels",
+    "name": "update_discounted_hotel",
+    "methods": [
+      "PUT"
+    ],
+    "path": "/api/discounted-hotels/{hotel_id}"
+  },
+  {
+    "module": "app.routes.discounted_hotels",
+    "name": "delete_discounted_hotel",
+    "methods": [
+      "DELETE"
+    ],
+    "path": "/api/discounted-hotels/{hotel_id}"
+  }
+]

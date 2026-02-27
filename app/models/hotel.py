@@ -10,6 +10,13 @@ class ContactDetail(BaseModel):
     contact_person: Optional[str] = None
     contact_number: Optional[str] = None
 
+    @field_validator('contact_number', mode='before')
+    @classmethod
+    def coerce_contact_number(cls, v):
+        if v is not None:
+            return str(v)
+        return v
+
 class BedPriceDetail(BaseModel):
     """Bed type pricing within a period"""
     bed_type_id: str
@@ -44,6 +51,13 @@ class HotelBase(BaseModel):
     video_url: Optional[str] = None
     allow_reselling: bool = Field(default=False)
     is_active: bool = Field(default=True)
+
+    @field_validator('contact_number', mode='before')
+    @classmethod
+    def coerce_contact_number(cls, v):
+        if v is not None:
+            return str(v)
+        return v
 
     @field_validator('available_until', mode='after')
     @classmethod
