@@ -52,6 +52,8 @@ from app.routes import (
     role_groups,
     # AIQS Flight Search
     flight_search,
+    # HR Management
+    hr,
 )
 from app.finance import routes as finance_routes
 from app.routes import debug
@@ -113,18 +115,18 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Request logging middleware
-from fastapi import Request
-import time
+# Request logging middleware - temporarily disabled to test CORS
+# from fastapi import Request
+# import time
 
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start_time = time.time()
-    print(f"\n🌐 {request.method} {request.url.path}")
-    response = await call_next(request)
-    duration = time.time() - start_time
-    print(f"✅ {request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
-    return response
+# @app.middleware("http")
+# async def log_requests(request: Request, call_next):
+#     start_time = time.time()
+#     print(f"\n🌐 {request.method} {request.url.path}")
+#     response = await call_next(request)
+#     duration = time.time() - start_time
+#     print(f"✅ {request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
+#     return response
 
 # Mount static files
 from fastapi.staticfiles import StaticFiles
@@ -184,6 +186,9 @@ app.include_router(customers.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(role_groups.router, prefix="/api")
 app.include_router(debug.router, prefix="/api")
+
+# HR Management
+app.include_router(hr.router, prefix="/api")
 
 # Finance & Accounting Module
 app.include_router(finance_routes.router, prefix="/api")

@@ -26,3 +26,4 @@ from . import bank_account
 from . import payment
 from . import pax_movement
 from . import operations
+from . import hr

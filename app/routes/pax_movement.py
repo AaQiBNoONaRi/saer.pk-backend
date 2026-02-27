@@ -145,7 +145,9 @@ async def get_pax_movement_stats(current_user: dict = Depends(get_current_user))
         if current_user.get("role") == "agency":
             query["agency_id"] = current_user.get("agency_id")
         elif current_user.get("role") == "branch":
+            # Branch sees only its own bookings (not agency bookings under it)
             query["branch_id"] = current_user.get("branch_id")
+            query["agency_id"] = None  # Exclude agency bookings
         
         # Fetch all approved bookings (Umrah and Custom)
         umrah_bookings = await db_ops.get_all(Collections.UMRAH_BOOKINGS, query)
@@ -207,7 +209,9 @@ async def get_pax_movement_list(
         if current_user.get("role") == "agency":
             query["agency_id"] = current_user.get("agency_id")
         elif current_user.get("role") == "branch":
+            # Branch sees only its own bookings (not agency bookings under it)
             query["branch_id"] = current_user.get("branch_id")
+            query["agency_id"] = None  # Exclude agency bookings
         
         # Fetch bookings
         umrah_bookings = await db_ops.get_all(Collections.UMRAH_BOOKINGS, query)
@@ -239,8 +243,8 @@ async def get_pax_movement_list(
                     "name": f"{passenger.get('first_name', '')} {passenger.get('last_name', '')}".strip(),
                     "passport": passenger.get("passport_number", "N/A"),
                     "status": booking_status.replace("_", " ").title(),
-                    "location": location,
-                    "agent": booking.get("agency_name", "Unknown"),
+                    "current_location": location,
+                    "agent_name": booking.get("agency_name", "Unknown"),
                     "last_updated": booking.get("updated_at", booking.get("created_at", "")),
                     "booking_id": str(booking.get("_id"))
                 }

@@ -60,6 +60,16 @@ class DBOperations:
         )
         return result
 
+    @staticmethod
+    async def update_one(collection_name: str, filter_query: Dict, update_data: Dict) -> Optional[Dict]:
+        """Update a document by filter query"""
+        collection = db_config.get_collection(collection_name)
+        update_data["updated_at"] = datetime.utcnow()
+        result = await collection.update_one(
+            filter_query,
+            {"$set": update_data}
+        )
+        return result
     
     @staticmethod
     async def delete(collection_name: str, doc_id: str) -> bool:
