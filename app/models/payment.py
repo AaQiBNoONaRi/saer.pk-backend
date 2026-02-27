@@ -119,17 +119,19 @@ class ProviderConfig(BaseModel):
         populate_by_name = True
 
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any
+from typing import Optional, List, Any
 from datetime import datetime
 
 class PaymentBase(BaseModel):
-    booking_id: str = Field(..., description="ID of the related booking")
-    booking_type: str = Field(..., description="Type of booking (ticket, umrah, custom)")
-    payment_method: str = Field(..., description="bank, cheque, cash, credit, etc.")
-    amount: float = Field(..., ge=0, description="Payment amount")
-    payment_date: str = Field(..., description="Date of payment")
+    booking_id: Optional[str] = Field(None, description="ID of the related booking")
+    booking_reference: Optional[str] = Field(None, description="Human-readable booking reference")
+    booking_type: Optional[str] = Field(None, description="Type of booking (ticket, umrah, custom)")
+    payment_method: Optional[str] = Field(None, description="bank, cheque, cash, credit, etc.")
+    amount: Optional[float] = Field(0.0, ge=0, description="Payment amount")
+    payment_date: Optional[Any] = Field(None, description="Date of payment")
     note: Optional[str] = Field(None, description="Optional notes")
-    status: str = Field(default="pending", description="Status: pending, approved, rejected")
+    status: Optional[str] = Field(default="pending", description="Status: pending, approved, rejected")
+    sender_role: Optional[str] = Field(None, description="Role of the sender (agency, branch, employee)")
     
     # Optional fields depending on payment method
     slip_url: Optional[str] = Field(None, description="URL path to the uploaded payment slip")
@@ -140,6 +142,12 @@ class PaymentBase(BaseModel):
     bank_name: Optional[str] = Field(None, description="Bank name for cash deposit")
     depositor_name: Optional[str] = Field(None, description="Name of cash depositor")
     depositor_cnic: Optional[str] = Field(None, description="CNIC of cash depositor")
+
+    # Transfer specific fields
+    transfer_account: Optional[str] = Field(None, description="Organization account for transfer")
+    transfer_account_name: Optional[str] = Field(None, description="Account name for transfer")
+    transfer_phone: Optional[str] = Field(None, description="Phone number for transfer")
+    transfer_cnic: Optional[str] = Field(None, description="CNIC for transfer")
 
 class PaymentCreate(PaymentBase):
     pass
@@ -158,10 +166,9 @@ class PaymentResponse(PaymentBase):
     created_at: datetime
     updated_at: datetime
     
-    model_config = {
-        "populate_by_name": True,
-        "arbitrary_types_allowed": True,
-        "json_encoders": {
+    class Config:
+        populate_by_name = True
+        arbitrary_types_allowed = True
+        json_encoders = {
             datetime: lambda v: v.isoformat()
         }
-    }
