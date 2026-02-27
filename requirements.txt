@@ -12,6 +12,7 @@ pymongo<4.7
 httpx
 websockets
 PyJWT
+pytz
 # Finance & Accounting – report generation
 openpyxl
 reportlab

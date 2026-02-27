@@ -98,6 +98,14 @@ class Collections:
     BLOGS = "blogs"
     FORMS = "forms"
     FORM_SUBMISSIONS = "form_submissions"
+    
+    # HR Management Collections
+    HR_ATTENDANCE = "hr_attendance"
+    HR_MOVEMENT_LOGS = "hr_movement_logs"
+    HR_PUNCTUALITY_RECORDS = "hr_punctuality_records"
+    HR_LEAVE_REQUESTS = "hr_leave_requests"
+    HR_FINES = "hr_fines"
+    HR_SALARY_PAYMENTS = "hr_salary_payments"
     # Hotel PMS Collections
     HOTEL_CATEGORIES = "hotel_categories"
     BED_TYPES = "bed_types"
