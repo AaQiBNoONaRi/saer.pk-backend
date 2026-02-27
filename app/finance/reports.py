@@ -328,28 +328,36 @@ async def get_agency_statement(
         entries  = doc.get("entries", [])
 
         if ref_type in ("ticket_booking", "umrah_booking", "custom_booking"):
-            # Amount billed to agency — increases their outstanding balance
-            amount = sum(float(e.get("debit", 0)) for e in entries if float(e.get("debit", 0)) > 0)
-            if amount:
-                running_balance += amount
-                rows.append({
-                    "date": date_val,
-                    "reference_type": ref_type,
-                    "reference_id": ref_id,
-                    "description": desc,
-                    "entry_desc": next(
-                        (e.get("description") for e in entries if float(e.get("debit", 0)) > 0),
-                        desc
-                    ),
-                    "amount_owed": round(amount, 2),
-                    "amount_paid": 0.0,
-                    "balance": round(running_balance, 2),
-                })
+            # Only consider the RECEIVABLE side of booking journals.
+            # The cost-of-sales journal for the same ref_id has no Receivable entry,
+            # so this filter naturally skips it.
+            receivable_entries = [
+                e for e in entries
+                if float(e.get("debit", 0)) > 0
+                and "receivable" in (e.get("account_name") or e.get("description") or "").lower()
+            ]
+            if not receivable_entries:
+                continue  # skip cost-of-sales and other companion journals
+
+            amount = sum(float(e.get("debit", 0)) for e in receivable_entries)
+            # Balance goes NEGATIVE: agency owes this amount to the organization
+            running_balance -= amount
+            rows.append({
+                "date": date_val,
+                "reference_type": ref_type,
+                "reference_id": ref_id,
+                "description": desc,
+                "entry_desc": receivable_entries[0].get("description", desc),
+                "amount_owed": round(amount, 2),
+                "amount_paid": 0.0,
+                "balance": round(running_balance, 2),
+            })
+
         elif ref_type == "payment_received":
-            # Agency payment received — decreases their outstanding balance
+            # Payment by agency — reduces what they owe (balance goes toward 0 / positive)
             amount = sum(float(e.get("credit", 0)) for e in entries if float(e.get("credit", 0)) > 0)
             if amount:
-                running_balance -= amount
+                running_balance += amount
                 rows.append({
                     "date": date_val,
                     "reference_type": ref_type,
@@ -363,21 +371,7 @@ async def get_agency_statement(
                     "amount_paid": round(amount, 2),
                     "balance": round(running_balance, 2),
                 })
-        else:
-            # Generic fallback
-            net = sum(float(e.get("debit", 0)) - float(e.get("credit", 0)) for e in entries)
-            if net:
-                running_balance += net
-                rows.append({
-                    "date": date_val,
-                    "reference_type": ref_type,
-                    "reference_id": ref_id,
-                    "description": desc,
-                    "entry_desc": desc,
-                    "amount_owed": round(max(net, 0), 2),
-                    "amount_paid": round(max(-net, 0), 2),
-                    "balance": round(running_balance, 2),
-                })
+
 
     return {
         "agency_id": agency_id,

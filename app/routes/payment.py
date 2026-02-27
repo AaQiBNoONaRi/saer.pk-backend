@@ -1,21 +1,26 @@
 """
 Payment and Voucher API Routes for Kuickapay Integration
 """
-from fastapi import APIRouter, HTTPException, Depends, Request, Header
+from fastapi import APIRouter, HTTPException, Depends, Request, Header, status, UploadFile, File, Form
 from typing import List, Optional
 from datetime import datetime
 from bson import ObjectId
 import secrets
 import hmac
 import hashlib
-
-from app.models.payment import Voucher, Transaction, Wallet
-from app.config.database import db_config
-from app.routes.admin import get_current_user
+import os
+import shutil
+import uuid
 import asyncio
 import inspect
 
-router = APIRouter(prefix="/api/payments", tags=["payments"])
+from app.models.payment import Voucher, Transaction, Wallet, PaymentResponse
+from app.config.database import db_config, Collections
+from app.utils.auth import get_current_user
+from app.database.db_operations import db_ops
+from app.utils.helpers import serialize_doc, serialize_docs
+
+router = APIRouter(prefix="/payments", tags=["payments"])
 
 
 # Helper Functions
@@ -768,21 +773,7 @@ async def bill_payment(
             "reserved": f"Unknown Error: {str(e)}"
         }
 
-
-import os
-import shutil
-import uuid
-from typing import List, Optional
-from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends, status, UploadFile, File, Form
-
-from app.database.db_operations import db_ops
-from app.config.database import Collections
-from app.utils.auth import get_current_user
-from app.utils.helpers import serialize_doc, serialize_docs
-from app.models.payment import PaymentResponse
-
-router = APIRouter(prefix="/payments", tags=["Payments"])
+# Manual Payment & Deposit Endpoints
 
 UPLOAD_DIR = "uploads/payments"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -800,6 +791,10 @@ async def create_payment(
     bank_name: Optional[str] = Form(None),
     depositor_name: Optional[str] = Form(None),
     depositor_cnic: Optional[str] = Form(None),
+    transfer_account: Optional[str] = Form(None),
+    transfer_account_name: Optional[str] = Form(None),
+    transfer_phone: Optional[str] = Form(None),
+    transfer_cnic: Optional[str] = Form(None),
     slip_file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user)
 ):
@@ -831,6 +826,10 @@ async def create_payment(
         "bank_name": bank_name,
         "depositor_name": depositor_name,
         "depositor_cnic": depositor_cnic,
+        "transfer_account": transfer_account,
+        "transfer_account_name": transfer_account_name,
+        "transfer_phone": transfer_phone,
+        "transfer_cnic": transfer_cnic,
     }
     
     # Resolve IDs from JWT
@@ -838,18 +837,16 @@ async def create_payment(
     payment_dict['agency_id'] = current_user.get('agency_id') or (current_user.get('sub') if role == 'agency' else None)
     payment_dict['branch_id'] = current_user.get('branch_id') or (current_user.get('sub') if role == 'branch' else None)
     payment_dict['organization_id'] = current_user.get('organization_id')
+    payment_dict['sender_role'] = role
     payment_dict['agent_name'] = (
         current_user.get('agency_name') or
         current_user.get('branch_name') or
         current_user.get('email', 'Unknown')
     )
     payment_dict['created_by'] = current_user.get('email') or current_user.get('username')
-    payment_dict['created_at'] = datetime.utcnow().isoformat()
+    payment_dict['created_at'] = datetime.utcnow()
     payment_dict['updated_at'] = payment_dict['created_at']
 
-    # Make sure we don't save empty string fields
-    payment_dict = {k: v for k, v in payment_dict.items() if v not in [None, ""]}
-    
     # Check if booking exists (either ticket, umrah, or custom)
     col_name = None
     if booking_type == "ticket":
@@ -863,7 +860,12 @@ async def create_payment(
         booking = await db_ops.get_by_id(col_name, booking_id)
         if not booking:
             raise HTTPException(status_code=404, detail="Related booking not found")
+        # Store the human-readable booking reference
+        payment_dict['booking_reference'] = booking.get('booking_reference')
             
+    # Make sure we don't save empty string fields
+    payment_dict = {k: v for k, v in payment_dict.items() if v not in [None, ""]}
+    
     # Logic for credit payment — handle inline, skip saving to payments collection
     if payment_method == "credit":
         agency_id = payment_dict.get('agency_id')
@@ -897,10 +899,13 @@ async def create_payment(
         return {
             "_id": "credit",
             "booking_id": booking_id,
+            "booking_reference": payment_dict.get('booking_reference'),
             "booking_type": booking_type,
             "payment_method": "credit",
             "amount": amount_to_pay,
             "status": "approved",
+            "sender_role": payment_dict.get('sender_role'),
+            "agent_name": payment_dict.get('agent_name'),
             "payment_date": payment_dict.get('payment_date'),
             "created_at": payment_dict.get('created_at'),
             "updated_at": payment_dict.get('updated_at', payment_dict.get('created_at')),
@@ -988,7 +993,7 @@ async def update_payment_status(
         
     update_data = {
         "status": new_status,
-        "updated_at": datetime.utcnow().isoformat()
+        "updated_at": datetime.utcnow()
     }
     if note:
         update_data["note"] = f"{payment.get('note', '')}\n[ORG UPDATE]: {note}".strip()

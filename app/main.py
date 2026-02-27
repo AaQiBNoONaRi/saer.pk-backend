@@ -165,7 +165,6 @@ app.include_router(discounted_hotels.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
-app.include_router(payment.router, prefix="/api")
 
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
@@ -177,7 +176,7 @@ app.include_router(operations.router, prefix="/api")
 app.include_router(flight_search.router, prefix="/api")
 
 # Payment System (Kuickapay)
-app.include_router(payment.router)
+app.include_router(payment.router, prefix="/api")
 
 # CRM
 app.include_router(leads.router, prefix="/api")
