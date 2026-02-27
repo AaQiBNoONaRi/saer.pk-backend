@@ -253,6 +253,11 @@ async def create_employee(
             detail=f"{employee.entity_type.capitalize()} not found"
         )
     
+    # Auto-generate emp_id if not provided
+    if not employee.emp_id:
+        count = await db_ops.count(Collections.EMPLOYEES, {"entity_type": employee.entity_type})
+        employee.emp_id = generate_employee_id(employee.entity_type, count + 1)
+
     # Check if emp_id already exists
     existing = await db_ops.get_one(Collections.EMPLOYEES, {"emp_id": employee.emp_id})
     if existing:
@@ -260,7 +265,7 @@ async def create_employee(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Employee ID already exists"
         )
-    
+
     # Check if email already exists
     existing_email = await db_ops.get_one(Collections.EMPLOYEES, {"email": employee.email})
     if existing_email:

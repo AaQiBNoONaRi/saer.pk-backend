@@ -8,7 +8,7 @@ from datetime import datetime
 VALID_PERMISSIONS = ["crm", "employees"]
 
 class EmployeeBase(BaseModel):
-    emp_id: str = Field(..., description="Employee ID (ORGEP001, BREMP001, AGCEMP001)")
+    emp_id: Optional[str] = Field(None, description="Employee ID (auto-generated if omitted: ORGEP001, BREMP001, AGCEMP001)")
     entity_type: Literal["organization", "branch", "agency"]
     entity_id: str = Field(..., description="ID of the organization, branch, or agency")
     name: str = Field(..., min_length=1, max_length=200)

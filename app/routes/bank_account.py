@@ -155,6 +155,30 @@ async def get_bank_accounts(
         # No extra filtering needed, they see all types for their org.
 
     accounts = await db_ops.get_all(Collections.BANK_ACCOUNTS, query, limit=1000)
+    
+    # Enrich accounts with owner name
+    org_ids = list(set(str(a.get("organization_id")) for a in accounts if a.get("organization_id")))
+    agency_ids = list(set(str(a.get("agency_id")) for a in accounts if a.get("agency_id")))
+    branch_ids = list(set(str(a.get("branch_id")) for a in accounts if a.get("branch_id")))
+    
+    orgs = await db_ops.get_all(Collections.ORGANIZATIONS, {"_id": {"$in": [ObjectId(id) for id in org_ids]}}) if org_ids else []
+    agencies = await db_ops.get_all(Collections.AGENCIES, {"_id": {"$in": [ObjectId(id) for id in agency_ids]}}) if agency_ids else []
+    branches = await db_ops.get_all(Collections.BRANCHES, {"_id": {"$in": [ObjectId(id) for id in branch_ids]}}) if branch_ids else []
+    
+    org_map = {str(o["_id"]): o.get("name") for o in orgs}
+    agency_map = {str(a["_id"]): a.get("name") or a.get("agency_name") for a in agencies}
+    branch_map = {str(b["_id"]): b.get("name") for b in branches}
+    
+    for acc in accounts:
+        if acc.get("account_type") == "Organization":
+            acc["owner_name"] = org_map.get(str(acc.get("organization_id")), "-")
+        elif acc.get("account_type") == "Agency":
+            acc["owner_name"] = agency_map.get(str(acc.get("agency_id")), "-")
+        elif acc.get("account_type") == "Branch":
+            acc["owner_name"] = branch_map.get(str(acc.get("branch_id")), "-")
+        else:
+            acc["owner_name"] = "-"
+            
     return serialize_docs(accounts)
 
 @router.put("/{account_id}", response_model=BankAccountResponse)

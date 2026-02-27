@@ -17,6 +17,7 @@ from datetime import datetime
 
 from app.config.database import db_config, Collections
 from app.utils.helpers import serialize_doc
+from app.database.db_operations import db_ops
 
 
 # ─── helpers ──────────────────────────────────────────────────────────────────
@@ -381,6 +382,75 @@ async def get_agency_statement(
         "rows": rows,
         "generated_at": datetime.utcnow().isoformat(),
     }
+
+
+async def get_all_agency_statements(
+    organization_id: Optional[str] = None,
+    branch_id: Optional[str] = None
+) -> List[Dict]:
+    """
+    Get a summary of all agency balances (receivables) for the organization.
+    Only returns agencies that have a negative balance (org is owed money).
+    Discovers agencies from journal entries directly to avoid ID type mismatches.
+    """
+    from bson import ObjectId
+
+    coll = db_config.get_collection(Collections.JOURNAL_ENTRIES)
+
+    # Step 1: Find all unique agency_ids from journal entries for this organization
+    match: Dict = {
+        "is_reversed": {"$ne": True},
+        "agency_id": {"$exists": True, "$ne": None, "$ne": ""},
+    }
+    if organization_id:
+        match["organization_id"] = organization_id
+
+    pipeline = [
+        {"$match": match},
+        {"$group": {"_id": "$agency_id"}},
+    ]
+    agency_id_docs = await coll.aggregate(pipeline).to_list(length=500)
+    agency_ids = [doc["_id"] for doc in agency_id_docs if doc.get("_id")]
+
+    if not agency_ids:
+        return []
+
+    # Step 2: Look up agency details in bulk
+    try:
+        object_ids = [ObjectId(aid) for aid in agency_ids if aid]
+        agency_docs = await db_ops.get_all(Collections.AGENCIES, {"_id": {"$in": object_ids}})
+    except Exception:
+        agency_docs = []
+
+    agency_map = {str(a["_id"]): a for a in agency_docs}
+
+    # Step 3: Compute balance for each agency using existing logic
+    statements = []
+    for agency_id in agency_ids:
+        try:
+            statement = await get_agency_statement(
+                agency_id=agency_id,
+                organization_id=organization_id,
+            )
+        except Exception:
+            continue
+
+        # current_balance < 0 means the agency owes money to the org
+        if statement["current_balance"] < 0:
+            agency_info = agency_map.get(agency_id, {})
+            statements.append({
+                "agency_id": agency_id,
+                "agency_name": agency_info.get("name") or agency_info.get("agency_name") or agency_id,
+                "email": agency_info.get("email"),
+                "phone": agency_info.get("phone"),
+                "total_owed": statement["total_owed"],
+                "total_paid": statement["total_paid"],
+                "current_balance": statement["current_balance"],
+            })
+
+    # Sort by most negative first (largest debt first)
+    statements.sort(key=lambda x: x["current_balance"])
+    return statements
 
 
 # ─── Dashboard KPIs ────────────────────────────────────────────────────────────
