@@ -55,9 +55,7 @@ class BookingCreate(BaseModel):
     # Backwards compatible financial fields
     total_amount: Optional[float] = 0
     
-    payment_method: Optional[str] = None
-    payment_status: Optional[str] = None
-    payment_details: Optional[Dict[str, Any]] = {}
+    payment_details: Optional[Dict[str, Any]] = Field(default_factory=dict)
     booking_status: Optional[str] = "underprocess"
     notes: Optional[str] = None
     agency_details: Optional[Dict[str, Any]] = None
@@ -67,8 +65,7 @@ class BookingCreate(BaseModel):
 class BookingUpdate(BaseModel):
     model_config = {"extra": "allow"}
     booking_status: Optional[str] = None
-    payment_method: Optional[str] = None
-    payment_status: Optional[str] = None
+    payment_details: Optional[Dict[str, Any]] = None
     paid_amount: Optional[float] = None
     discount: Optional[float] = None
     child_price: Optional[float] = None
@@ -193,8 +190,9 @@ async def create_ticket_booking(
         print(f"⚠️  Journal engine warning for {created_booking.get('booking_reference')}: {je}")
         
     # ── Auto-create pending payment for bank/cash ───────────────────────────
-    pmt_method = booking_dict.get("payment_method")
-    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online"]:
+    pm_details = booking_dict.get("payment_details") or {}
+    pmt_method = pm_details.get("payment_method")
+    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online", "transfer"]:
         payment_doc = {
             "booking_id": str(created_booking.get('_id')),
             "booking_type": "ticket",
@@ -209,6 +207,12 @@ async def create_ticket_booking(
             "created_by": booking_dict['created_by'],
             "created_at": booking_dict['created_at'],
             "updated_at": booking_dict['created_at'],
+            # Mirror transfer details to Payment record if present
+            "transfer_account_number": pm_details.get("transfer_account_number"),
+            "transfer_account_name": pm_details.get("transfer_account_name"),
+            "transfer_phone": pm_details.get("transfer_phone"),
+            "transfer_cnic": pm_details.get("transfer_cnic"),
+            "transfer_account": pm_details.get("transfer_account")
         }
         await db_ops.create(Collections.PAYMENTS, payment_doc)
 

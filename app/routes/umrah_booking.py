@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import random, string, os, shutil, uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database.db_operations import db_ops
 from app.config.database import Collections
@@ -77,9 +77,7 @@ class UmrahBookingCreate(BaseModel):
     total_amount: float = 0
     discount_group_id: Optional[str] = None  # ID of the discount group applied
     discount_amount: Optional[float] = 0     # Calculated discount amount
-    payment_method: Optional[str] = None
-    payment_status: Optional[str] = None
-    payment_details: Optional[Dict[str, Any]] = None
+    payment_details: Optional[Dict[str, Any]] = Field(default_factory=dict)
     booking_status: str = "underprocess"
     # Voucher status — starts as Draft, updated during delivery
     voucher_status: Optional[str] = "Draft"
@@ -98,8 +96,6 @@ class UmrahBookingUpdate(BaseModel):
     model_config = {"extra": "allow"}
     booking_status: Optional[str] = None
     voucher_status: Optional[str] = None
-    payment_method: Optional[str] = None
-    payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
     passengers: Optional[List[PassengerData]] = None
@@ -294,8 +290,9 @@ async def create_umrah_booking(
         print(f"⚠️  Journal engine warning for {created.get('booking_reference')}: {je}")
 
     # ── Auto-create pending payment for bank/cash ───────────────────────────
-    pmt_method = booking_dict.get("payment_method")
-    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online"]:
+    pm_details = booking_dict.get("payment_details") or {}
+    pmt_method = pm_details.get("payment_method")
+    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online", "transfer"]:
         payment_doc = {
             "booking_id": str(created.get('_id')),
             "booking_type": "umrah",
@@ -310,6 +307,12 @@ async def create_umrah_booking(
             "created_by": booking_dict['created_by'],
             "created_at": booking_dict['created_at'],
             "updated_at": booking_dict['created_at'],
+            # Mirror transfer details to Payment record if present
+            "transfer_account_number": pm_details.get("transfer_account_number"),
+            "transfer_account_name": pm_details.get("transfer_account_name"),
+            "transfer_phone": pm_details.get("transfer_phone"),
+            "transfer_cnic": pm_details.get("transfer_cnic"),
+            "transfer_account": pm_details.get("transfer_account")
         }
         await db_ops.create(Collections.PAYMENTS, payment_doc)
 
