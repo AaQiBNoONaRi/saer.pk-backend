@@ -14,7 +14,7 @@ class BankAccountBase(BaseModel):
     bank_name: str = Field(..., min_length=1, max_length=100)
     account_title: str = Field(..., min_length=1, max_length=100)
     account_number: str = Field(..., min_length=1, max_length=50)
-    iban: Optional[str] = Field(None, min_length=1, max_length=50)
+    iban: str = Field(..., min_length=1, max_length=50)
     status: str = Field(default="Active") # Active, Inactive
     is_active: bool = True
 
@@ -34,6 +34,7 @@ class BankAccountResponse(BankAccountBase):
     id: str = Field(alias="_id")
     created_at: datetime
     updated_at: datetime
+    owner_name: Optional[str] = None
     
     model_config = {
         "populate_by_name": True,

@@ -1050,5 +1050,21 @@ async def update_payment_status(
                     )
                 except Exception as je:
                     print(f"⚠️  Journal engine warning for payment approval {payment_id}: {je}")
+                    
+        elif b_type == "manual":
+            from app.finance.journal_engine import create_payment_received_journal
+            try:
+                await create_payment_received_journal(
+                    booking_reference=f"DEP-{payment_id[-8:].upper()}",
+                    amount=float(payment.get('amount', 0)),
+                    payment_method=payment.get('payment_method', 'bank'),
+                    agency_name=payment.get('agent_name', 'Agency'),
+                    organization_id=payment.get('organization_id'),
+                    branch_id=payment.get('branch_id'),
+                    agency_id=payment.get('agency_id'),
+                    created_by=current_user.get('email') or current_user.get('username') or "System"
+                )
+            except Exception as je:
+                print(f"⚠️  Journal engine warning for manual payment approval {payment_id}: {je}")
             
     return serialize_doc(updated_payment)
