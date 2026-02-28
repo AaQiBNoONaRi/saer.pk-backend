@@ -315,6 +315,30 @@ async def agency_statement(
     )
 
 
+@router.get("/reports/all-agency-statements")
+async def all_agency_statements(
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Returns a summary of all agency statements showing their current balances.
+    Only accessible by organization users.
+    """
+    role = current_user.get("role", "")
+    if role not in ["organization", "admin", "super_admin"] and current_user.get("user_type") != "organization" and current_user.get("entity_type") != "organization" and not current_user.get("emp_id", "").startswith("ORG-"):
+        raise HTTPException(status_code=403, detail="Only organization users can view all agency statements")
+        
+    org_id = current_user.get("organization_id")
+    branch_id = current_user.get("branch_id") if role == "branch" else None
+    
+    from app.finance.reports import get_all_agency_statements
+    statements = await get_all_agency_statements(
+        organization_id=org_id,
+        branch_id=branch_id
+    )
+    
+    return statements
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Downloadable Reports (Excel / PDF)
 # ═══════════════════════════════════════════════════════════════════════════════
