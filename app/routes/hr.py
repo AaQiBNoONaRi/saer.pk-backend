@@ -437,10 +437,23 @@ async def get_attendance(
     org_id = current_user.get("organization_id") or current_user.get("entity_id")
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization ID not found")
-    
-    query = {"organization_id": org_id}
+
     if emp_id:
-        query["emp_id"] = emp_id
+        # Single employee: query by emp_id only — no org filter needed
+        query = {"emp_id": emp_id}
+    else:
+        # Org-wide query: find all emp_ids for this org, then query attendance by those IDs.
+        # This avoids the organization_id mismatch (records may have been created by employee
+        # tokens whose entity_id differs from the admin's entity_id).
+        org_employees = await db_ops.get_all(
+            Collections.EMPLOYEES,
+            {"entity_id": org_id, "entity_type": "organization"}
+        )
+        org_emp_ids = [e["emp_id"] for e in org_employees if e.get("emp_id")]
+        if not org_emp_ids:
+            return []
+        query = {"emp_id": {"$in": org_emp_ids}}
+
     if start_date and end_date:
         query["date"] = {"$gte": start_date, "$lte": end_date}
     elif start_date:
@@ -449,9 +462,28 @@ async def get_attendance(
         query["date"] = {"$lte": end_date}
     if status:
         query["status"] = status
-    
+
     records = await db_ops.get_all(Collections.HR_ATTENDANCE, query)
     return serialize_docs(records)
+
+
+
+@router.get("/attendance/today/{emp_id}")
+async def get_today_attendance(emp_id: str, current_user: dict = Depends(get_current_user)):
+    """Get today's attendance record for a specific employee.
+    Queries only by emp_id + today's date — no organization_id filter —
+    so it works regardless of which token (admin or employee) created the record.
+    """
+    today = date.today().isoformat()
+    record = await db_ops.get_one(Collections.HR_ATTENDANCE, {
+        "emp_id": emp_id,
+        "date": today
+    })
+    if not record:
+        return {"status": "not_checked_in", "check_in": None, "check_out": None, "date": today}
+    return serialize_doc(record)
+
+
 
 
 # ===================== Movement Management =====================
