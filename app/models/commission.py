@@ -24,6 +24,7 @@ class CommissionBase(BaseModel):
     package_commission: float = Field(default=0, ge=0, description="Umrah package commission amount")
     package_commission_type: Literal["percentage", "fixed"] = Field(default="fixed", description="Commission type for packages")
     hotel_commissions: List[HotelCommissionPeriod] = Field(default_factory=list, description="Hotel commission periods")
+    applied_to: Literal["employee", "branch", "agency"] = Field(default="employee", description="Entity type this commission group is for")
     is_active: bool = True
     
     @field_validator('ticket_commission')
@@ -50,6 +51,7 @@ class CommissionUpdate(BaseModel):
     package_commission: Optional[float] = Field(None, ge=0)
     package_commission_type: Optional[Literal["percentage", "fixed"]] = None
     hotel_commissions: Optional[List[HotelCommissionPeriod]] = None
+    applied_to: Optional[Literal["employee", "branch", "agency"]] = None
     is_active: Optional[bool] = None
 
 class CommissionResponse(CommissionBase):

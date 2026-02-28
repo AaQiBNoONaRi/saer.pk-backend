@@ -13,6 +13,8 @@ from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from app.services.commission_service import create_commission_records
+from app.services.service_charge_logic import get_branch_service_charge, apply_ticket_charge
 from app.finance.journal_engine import create_ticket_booking_journal
 from bson import ObjectId
 
@@ -150,9 +152,36 @@ async def create_ticket_booking(
         current_user.get('email', 'Unknown')
     )
 
-    # ── If branch books directly, ensure agency_id is null ──
-    if role == 'branch':
+    # ── If branch/employee books directly, ensure agency_id is null ──
+    is_branch_user = (role == 'branch') or (current_user.get('entity_type') == 'branch')
+    is_agency_user = (role == 'agency')
+    
+    if is_branch_user:
         booking_dict['agency_id'] = None
+        
+    # ── Service Charge Enforcement for Branch and Area Agency users ──
+    agency_type = current_user.get('agency_type')
+    if is_branch_user or (is_agency_user and agency_type == 'area'):
+        branch_id_for_sc = branch_id or current_user.get('entity_id')
+        rule = await get_branch_service_charge(branch_id_for_sc)
+        if rule:
+            base_adult = ticket.get("adult_selling", 0)
+            total_sc = 0
+            calculated_grand_total = 0
+            
+            for p in booking.passengers:
+                ptype = p.type.lower() if p.type else "adult"
+                base_p = ticket.get(f"{ptype}_selling", base_adult)
+                inclusive_p = apply_ticket_charge(base_p, rule)
+                total_sc += (inclusive_p - base_p)
+                calculated_grand_total += inclusive_p
+            
+            booking_dict['service_charge_per_person'] = (total_sc / booking.total_passengers) if booking.total_passengers > 0 else 0
+            booking_dict['total_service_charge'] = total_sc
+            # Update grand total to be inclusive of service charges
+            booking_dict['grand_total'] = calculated_grand_total
+            booking_dict['total_amount'] = calculated_grand_total
+            print(f"DEBUG: Applied Service Charge of {total_sc} to booking. New Grand Total: {calculated_grand_total}")
 
     # ── fetch & embed full hierarchy documents (strip passwords) ──
     if agency_id:
@@ -224,6 +253,16 @@ async def create_ticket_booking(
         {"available_seats": new_available_seats}
     )
     
+    # ── Auto-create commission records (non-blocking) ─────────────────────────
+    try:
+        await create_commission_records(
+            booking=serialize_doc(created_booking),
+            booking_type="ticket",
+            current_user=current_user,
+        )
+    except Exception as ce:
+        print(f"⚠️  Commission engine warning: {ce}")
+
     return serialize_doc(created_booking)
 
 @router.get("/")
@@ -248,9 +287,6 @@ async def get_ticket_bookings(
         oid = current_user.get('organization_id') or current_user.get('sub')
         if oid:
             filter_query['organization_id'] = oid
-            # Ensure it's an organization-level booking (not branch or agency)
-            filter_query['branch_id'] = None
-            filter_query['agency_id'] = None
     elif role == 'agency' or entity_type == 'agency':
         aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['agency_id'] = aid

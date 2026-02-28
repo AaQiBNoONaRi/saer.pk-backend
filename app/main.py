@@ -24,6 +24,7 @@ from app.routes import (
     agency_auth,
     discount,
     commission,
+    commission_records,
     service_charge,
     # Hotel PMS Routers
     hotel_category,
@@ -162,6 +163,7 @@ app.include_router(service_charge.router, prefix="/api")
 # Discounted Hotels
 from app.routes import discounted_hotels
 app.include_router(discounted_hotels.router, prefix="/api")
+app.include_router(commission_records.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
