@@ -10,7 +10,7 @@ class AgencyBase(BaseModel):
     branch_id: str
     name: str = Field(..., min_length=1, max_length=200)
     email: EmailStr
-    phone: str = Field(..., min_length=10, max_length=20)
+    phone: str = Field(..., max_length=20)
     address: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None
@@ -27,7 +27,7 @@ class AgencyCreate(AgencyBase):
 class AgencyUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     email: Optional[EmailStr] = None
-    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    phone: Optional[str] = Field(None, max_length=20)
     address: Optional[str] = None
     city: Optional[str] = None
     country: Optional[str] = None

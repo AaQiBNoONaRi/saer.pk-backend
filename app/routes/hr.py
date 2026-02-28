@@ -46,6 +46,17 @@ def parse_time(time_str: str) -> tuple:
         return 18, 0
 
 
+
+async def get_allowed_emp_ids(current_user: dict, org_id: str) -> list:
+    """Get list of employee IDs the current user is allowed to see (branch or org)"""
+    entity_id = current_user.get("branch_id") if current_user.get("role") == "branch" else org_id
+    entity_type = "branch" if current_user.get("role") == "branch" else "organization"
+    employees = await db_ops.get_all(
+        Collections.EMPLOYEES,
+        {"entity_id": entity_id, "entity_type": entity_type}
+    )
+    return [e["emp_id"] for e in employees if e.get("emp_id")]
+
 # ===================== Dashboard Stats =====================
 @router.get("/dashboard/stats")
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
@@ -57,16 +68,25 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     today = date.today()
     current_month = today.strftime("%Y-%m")
     
+    # Filter by branch or org
+    allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+    if not allowed_emp_ids:
+        return {
+            "total_employees": 0, "present_today": 0, "late_today": 0, "absent_today": 0,
+            "salaries_paid_this_month": 0, "pending_salaries": 0, "pending_leave_requests": 0,
+            "total_movements_today": 0, "total_commissions_this_month": 0, "avg_checkin_time": "--:--",
+            "punctuality_score": 0
+        }
+
     # Total employees
     total_employees = await db_ops.count(Collections.EMPLOYEES, {
-        "entity_id": org_id,
-        "entity_type": "organization",
+        "emp_id": {"$in": allowed_emp_ids},
         "is_active": True
     })
     
     # Today's attendance
     today_attendance = await db_ops.get_all(Collections.HR_ATTENDANCE, {
-        "organization_id": org_id,
+        "emp_id": {"$in": allowed_emp_ids},
         "date": today.isoformat()
     })
     
@@ -76,7 +96,7 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     
     # Financial stats
     salaries_this_month = await db_ops.get_all(Collections.HR_SALARY_PAYMENTS, {
-        "organization_id": org_id,
+        "emp_id": {"$in": allowed_emp_ids},
         "month": current_month
     })
     
@@ -85,19 +105,19 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     
     # Pending approvals
     pending_leave_requests = await db_ops.count(Collections.HR_LEAVE_REQUESTS, {
-        "organization_id": org_id,
+        "emp_id": {"$in": allowed_emp_ids},
         "status": "pending"
     })
     
     # Total movements today
     total_movements_today = await db_ops.count(Collections.HR_MOVEMENT_LOGS, {
-        "organization_id": org_id,
+        "emp_id": {"$in": allowed_emp_ids},
         "date": today.isoformat()
     })
     
     # Total commissions this month
     commissions_this_month = await db_ops.get_all(Collections.HR_SALARY_PAYMENTS, {
-        "organization_id": org_id,
+        "emp_id": {"$in": allowed_emp_ids},
         "month": current_month
     })
     total_commissions = sum(s.get("commission_total", 0) for s in commissions_this_month)
@@ -132,7 +152,42 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     if today_attendance:
         on_time = len([a for a in today_attendance if a.get("status") in ["on_time", "grace", "present"]])
         punctuality_score = int((on_time / len(today_attendance)) * 100) if len(today_attendance) > 0 else 0
+
+    # Build employee lookup for names
+    emps = await db_ops.get_all(Collections.EMPLOYEES, {"emp_id": {"$in": allowed_emp_ids}})
+    emp_lookup = {e["emp_id"]: (e.get("full_name") or e.get("name") or e["emp_id"]) for e in emps}
+
+    # Gather recent activities
+    checkins = [{"type": "attendance", "action": "Checked in", "time": a.get("check_in"), "emp_id": a.get("emp_id"), "emp_name": emp_lookup.get(a.get("emp_id"), a.get("emp_id"))} for a in today_attendance if a.get("check_in")]
+    checkouts = [{"type": "attendance", "action": "Checked out", "time": a.get("check_out"), "emp_id": a.get("emp_id"), "emp_name": emp_lookup.get(a.get("emp_id"), a.get("emp_id"))} for a in today_attendance if a.get("check_out")]
     
+    today_movements = await db_ops.get_all(Collections.HR_MOVEMENT_LOGS, {"emp_id": {"$in": allowed_emp_ids}, "date": today.isoformat()})
+    movements = [{"type": "movement", "action": "Started movement", "time": m.get("start_time"), "emp_id": m.get("emp_id"), "emp_name": emp_lookup.get(m.get("emp_id"), m.get("emp_id"))} for m in today_movements]
+    
+    pending_requests_full = await db_ops.get_all(Collections.HR_LEAVE_REQUESTS, {"emp_id": {"$in": allowed_emp_ids}, "status": "pending"})
+    leaves = [{"type": "leave", "action": "Requested leave", "time": l.get("created_at") or datetime.now().isoformat(), "emp_id": l.get("emp_id"), "emp_name": emp_lookup.get(l.get("emp_id"), l.get("emp_id"))} for l in pending_requests_full]
+
+    all_activities = checkins + checkouts + movements + leaves
+    
+    def get_time_str(val):
+        if isinstance(val, datetime): return val.isoformat()
+        if isinstance(val, str): return val
+        return ""
+
+    all_activities.sort(key=lambda x: get_time_str(x.get("time")), reverse=True)
+    recent_activities = all_activities[:6]
+
+    # Process pending requests for notifications array
+    approval_notifications = []
+    from app.utils.helpers import serialize_docs
+    serialized_reqs = serialize_docs(pending_requests_full)
+    for req in serialized_reqs:
+        req["emp_name"] = emp_lookup.get(req.get("emp_id"), req.get("emp_id"))
+        approval_notifications.append(req)
+        
+    # Sort notifications newest first
+    approval_notifications.sort(key=lambda x: get_time_str(x.get("created_at")), reverse=True)
+
     return {
         "total_employees": total_employees,
         "present_today": present_today,
@@ -144,7 +199,9 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
         "total_movements_today": total_movements_today,
         "total_commissions_this_month": total_commissions,
         "avg_checkin_time": avg_checkin_time or "--:--",
-        "punctuality_score": punctuality_score
+        "punctuality_score": punctuality_score,
+        "recent_activities": recent_activities,
+        "approval_notifications": approval_notifications
     }
 
 
@@ -161,9 +218,11 @@ async def get_hr_employees(
         raise HTTPException(status_code=400, detail="Organization ID not found")
     
     # Query by entity_id and entity_type since employees are stored this way
+    entity_id = current_user.get("branch_id") if current_user.get("role") == "branch" else org_id
+    entity_type = "branch" if current_user.get("role") == "branch" else "organization"
     query = {
-        "entity_id": org_id,
-        "entity_type": "organization"
+        "entity_id": entity_id,
+        "entity_type": entity_type
     }
     if is_active is not None:
         query["is_active"] = is_active
@@ -311,11 +370,13 @@ async def check_out(request: CheckOutRequest, current_user: dict = Depends(get_c
     
     check_in_time = attendance.get("check_in")
     if isinstance(check_in_time, str):
-        check_in_time = datetime.fromisoformat(check_in_time)
+        check_in_time = datetime.fromisoformat(check_in_time.replace('Z', '+00:00'))
     
     # Ensure check_in_time is timezone-aware (PKT)
     if check_in_time.tzinfo is None:
         check_in_time = PKT.localize(check_in_time)
+    else:
+        check_in_time = check_in_time.astimezone(PKT)
     
     # Get employee expected checkout time
     employee = await db_ops.get_one(Collections.EMPLOYEES, {"emp_id": request.emp_id})
@@ -442,17 +503,11 @@ async def get_attendance(
         # Single employee: query by emp_id only — no org filter needed
         query = {"emp_id": emp_id}
     else:
-        # Org-wide query: find all emp_ids for this org, then query attendance by those IDs.
-        # This avoids the organization_id mismatch (records may have been created by employee
-        # tokens whose entity_id differs from the admin's entity_id).
-        org_employees = await db_ops.get_all(
-            Collections.EMPLOYEES,
-            {"entity_id": org_id, "entity_type": "organization"}
-        )
-        org_emp_ids = [e["emp_id"] for e in org_employees if e.get("emp_id")]
-        if not org_emp_ids:
+        # Filter by branch or org
+        allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+        if not allowed_emp_ids:
             return []
-        query = {"emp_id": {"$in": org_emp_ids}}
+        query = {"emp_id": {"$in": allowed_emp_ids}}
 
     if start_date and end_date:
         query["date"] = {"$gte": start_date, "$lte": end_date}
@@ -560,9 +615,14 @@ async def get_movements(
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization ID not found")
     
+    allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+    if not allowed_emp_ids: return []
     query = {"organization_id": org_id}
     if emp_id:
+        if emp_id not in allowed_emp_ids: return []
         query["emp_id"] = emp_id
+    else:
+        query["emp_id"] = {"$in": allowed_emp_ids}
     if start_date and end_date:
         query["date"] = {"$gte": start_date, "$lte": end_date}
     if status:
@@ -614,9 +674,14 @@ async def get_leave_requests(
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization ID not found")
     
+    allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+    if not allowed_emp_ids: return []
     query = {"organization_id": org_id}
     if emp_id:
+        if emp_id not in allowed_emp_ids: return []
         query["emp_id"] = emp_id
+    else:
+        query["emp_id"] = {"$in": allowed_emp_ids}
     if status:
         query["status"] = status
     if request_type:
@@ -740,9 +805,14 @@ async def get_punctuality(
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization ID not found")
     
+    allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+    if not allowed_emp_ids: return []
     query = {"organization_id": org_id}
     if emp_id:
+        if emp_id not in allowed_emp_ids: return []
         query["emp_id"] = emp_id
+    else:
+        query["emp_id"] = {"$in": allowed_emp_ids}
     if start_date and end_date:
         query["date"] = {"$gte": start_date, "$lte": end_date}
     
@@ -772,9 +842,14 @@ async def get_fines(
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization ID not found")
     
+    allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+    if not allowed_emp_ids: return []
     query = {"organization_id": org_id}
     if emp_id:
+        if emp_id not in allowed_emp_ids: return []
         query["emp_id"] = emp_id
+    else:
+        query["emp_id"] = {"$in": allowed_emp_ids}
     if month:
         query["applied_to_salary_month"] = month
     
@@ -794,10 +869,12 @@ async def auto_generate_due_salaries(current_user: dict = Depends(get_current_us
     current_day = today.day
     current_month_str = today.strftime("%Y-%m")
     
-    # Get all active employees
+    # Get all active employees mapped accurately to branch/org
+    entity_id = current_user.get("branch_id") if current_user.get("role") == "branch" else org_id
+    entity_type = "branch" if current_user.get("role") == "branch" else "organization"
     employees = await db_ops.get_all(Collections.EMPLOYEES, {
-        "entity_id": org_id,
-        "entity_type": "organization",
+        "entity_id": entity_id,
+        "entity_type": entity_type,
         "is_active": True
     })
     
@@ -915,9 +992,14 @@ async def get_salaries(
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization ID not found")
     
+    allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+    if not allowed_emp_ids: return []
     query = {"organization_id": org_id}
     if emp_id:
+        if emp_id not in allowed_emp_ids: return []
         query["emp_id"] = emp_id
+    else:
+        query["emp_id"] = {"$in": allowed_emp_ids}
     if month:
         query["month"] = month
     if status:
@@ -1108,17 +1190,30 @@ async def get_punctuality_analytics(
     if not start_date:
         start_date = (date.today() - timedelta(days=30)).isoformat()
     
-    # Build query
+    allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+    if not allowed_emp_ids:
+        return {
+            "statistics": {
+                "total_late_arrivals": 0, "total_grace_usage": 0,
+                "total_absences": 0, "total_early_leaves": 0,
+                "overall_punctuality_score": 0
+            },
+            "employees": []
+        }
+
+    # Build query using allowed_emp_ids for isolation
     attendance_query = {
-        "organization_id": org_id,
+        "emp_id": {"$in": allowed_emp_ids},
         "date": {"$gte": start_date, "$lte": end_date}
     }
     punctuality_query = {
-        "organization_id": org_id,
+        "emp_id": {"$in": allowed_emp_ids},
         "date": {"$gte": start_date, "$lte": end_date}
     }
     
     if emp_id:
+        if emp_id not in allowed_emp_ids:
+            return {"statistics": {}, "employees": []}
         attendance_query["emp_id"] = emp_id
         punctuality_query["emp_id"] = emp_id
     
@@ -1126,10 +1221,12 @@ async def get_punctuality_analytics(
     attendance_records = await db_ops.get_all(Collections.HR_ATTENDANCE, attendance_query)
     punctuality_records = await db_ops.get_all(Collections.HR_PUNCTUALITY_RECORDS, punctuality_query)
     
-    # Get all employees
+    # Get all employees accurately mapped to branch/org
+    entity_id = current_user.get("branch_id") if current_user.get("role") == "branch" else org_id
+    entity_type = "branch" if current_user.get("role") == "branch" else "organization"
     emp_query = {
-        "entity_id": org_id,
-        "entity_type": "organization",
+        "entity_id": entity_id,
+        "entity_type": entity_type,
         "is_active": True
     }
     if emp_id:
@@ -1192,7 +1289,7 @@ async def get_punctuality_analytics(
         
         employee_data.append({
             "emp_id": emp_id_val,
-            "full_name": emp.get("full_name", "Unknown"),
+            "full_name": emp.get("full_name") or emp.get("name") or "Unknown",
             "designation": emp.get("designation", ""),
             "working_days": working_days,
             "total_days": total_days,
@@ -1236,7 +1333,14 @@ async def get_salary_statistics(
     if not org_id:
         raise HTTPException(status_code=400, detail="Organization ID not found")
     
-    query = {"organization_id": org_id}
+    allowed_emp_ids = await get_allowed_emp_ids(current_user, org_id)
+    if not allowed_emp_ids:
+        return {
+            "total_pending": 0, "total_paid": 0, "total_records": 0,
+            "overdue_count": 0, "pending_count": 0, "paid_count": 0
+        }
+
+    query = {"emp_id": {"$in": allowed_emp_ids}}
     if month:
         query["month"] = month
     
