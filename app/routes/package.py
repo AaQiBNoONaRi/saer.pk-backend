@@ -24,6 +24,7 @@ async def create_package(
 @router.get("/", response_model=List[PackageResponse])
 async def get_packages(
     is_active: bool = None,
+    public_active: bool = None,
     skip: int = 0,
     limit: int = 100,
     current_user: dict = Depends(get_current_user)
@@ -32,7 +33,21 @@ async def get_packages(
     filter_query = {}
     if is_active is not None:
         filter_query["is_active"] = is_active
-        
+    if public_active is not None:
+        filter_query["public_active"] = public_active
+    packages = await db_ops.get_all(Collections.PACKAGES, filter_query, skip=skip, limit=limit)
+    return serialize_docs(packages)
+
+@router.get("/public/list", response_model=List[PackageResponse])
+async def get_public_packages(
+    skip: int = 0,
+    limit: int = 100
+):
+    """Get all public packages without authentication"""
+    filter_query = {
+        "is_active": True,
+        "public_active": True
+    }
     packages = await db_ops.get_all(Collections.PACKAGES, filter_query, skip=skip, limit=limit)
     return serialize_docs(packages)
 
