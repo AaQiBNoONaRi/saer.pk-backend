@@ -5,12 +5,14 @@ from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import random, string, os, shutil, uuid
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from app.services.service_charge_logic import get_branch_service_charge, apply_package_charge, apply_hotel_charge
+from app.services.commission_service import create_commission_records
 from app.finance.journal_engine import create_umrah_booking_journal
 
 router = APIRouter(prefix="/umrah-bookings", tags=["Umrah Bookings"])
@@ -77,9 +79,7 @@ class UmrahBookingCreate(BaseModel):
     total_amount: float = 0
     discount_group_id: Optional[str] = None  # ID of the discount group applied
     discount_amount: Optional[float] = 0     # Calculated discount amount
-    payment_method: Optional[str] = None
-    payment_status: Optional[str] = None
-    payment_details: Optional[Dict[str, Any]] = None
+    payment_details: Optional[Dict[str, Any]] = Field(default_factory=dict)
     booking_status: str = "underprocess"
     # Voucher status — starts as Draft, updated during delivery
     voucher_status: Optional[str] = "Draft"
@@ -98,8 +98,6 @@ class UmrahBookingUpdate(BaseModel):
     model_config = {"extra": "allow"}
     booking_status: Optional[str] = None
     voucher_status: Optional[str] = None
-    payment_method: Optional[str] = None
-    payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
     passengers: Optional[List[PassengerData]] = None
@@ -186,9 +184,49 @@ async def create_umrah_booking(
         current_user.get('email', 'Unknown')
     )
 
-    # ── If branch books directly, ensure agency_id is null ──
-    if role == 'branch':
+    # ── If branch/employee books directly, ensure agency_id is null ──
+    is_branch_user = (role == 'branch') or (current_user.get('entity_type') == 'branch')
+    is_agency_user = (role == 'agency')
+    
+    if is_branch_user:
         booking_dict['agency_id'] = None
+        
+    # ── Service Charge Enforcement for Branch and Area Agency users ──
+    agency_type = current_user.get('agency_type')
+    if is_branch_user or (is_agency_user and agency_type == 'area'):
+        branch_id_for_sc = branch_id or current_user.get('entity_id')
+        rule = await get_branch_service_charge(branch_id_for_sc)
+        if rule:
+            total_sc = 0
+            calculated_total_amount = 0
+            pkg_prices = package.get('package_prices', {})
+            
+            for room in booking_dict.get('rooms_selected', []):
+                hotel_id = room.get('hotel_id')
+                rtype = room.get('room_type', 'sharing').lower()
+                
+                # Get base price from package inventory to ensure zero-bypass
+                base_p_obj = pkg_prices.get(rtype, 0)
+                if isinstance(base_p_obj, dict):
+                    base_p = base_p_obj.get('selling', 0)
+                else:
+                    base_p = base_p_obj or 0
+                
+                if not base_p:
+                    # fallback if not in package_prices (unlikely for valid booking)
+                    base_p = room.get('price_per_person', 0)
+                
+                # Apply ONLY package charge (no component-level hotel charges for fixed packages)
+                inclusive_p = apply_package_charge(base_p, rule)
+                
+                room['price_per_person'] = inclusive_p
+                # In UmrahBooking, 'quantity' in room_selection is usually the total number of passengers in that room type
+                total_sc += (inclusive_p - base_p) * room.get('quantity', 0)
+                calculated_total_amount += inclusive_p * room.get('quantity', 0)
+                
+            booking_dict['total_service_charge'] = total_sc
+            booking_dict['total_amount'] = calculated_total_amount
+            print(f"DEBUG: Applied Umrah Service Charge of {total_sc} to booking. New Total: {calculated_total_amount}")
 
     # ── fetch & embed full hierarchy documents (strip password fields) ──
     if agency_id:
@@ -294,8 +332,9 @@ async def create_umrah_booking(
         print(f"⚠️  Journal engine warning for {created.get('booking_reference')}: {je}")
 
     # ── Auto-create pending payment for bank/cash ───────────────────────────
-    pmt_method = booking_dict.get("payment_method")
-    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online"]:
+    pm_details = booking_dict.get("payment_details") or {}
+    pmt_method = pm_details.get("payment_method")
+    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online", "transfer"]:
         payment_doc = {
             "booking_id": str(created.get('_id')),
             "booking_type": "umrah",
@@ -310,8 +349,24 @@ async def create_umrah_booking(
             "created_by": booking_dict['created_by'],
             "created_at": booking_dict['created_at'],
             "updated_at": booking_dict['created_at'],
+            # Mirror transfer details to Payment record if present
+            "transfer_account_number": pm_details.get("transfer_account_number"),
+            "transfer_account_name": pm_details.get("transfer_account_name"),
+            "transfer_phone": pm_details.get("transfer_phone"),
+            "transfer_cnic": pm_details.get("transfer_cnic"),
+            "transfer_account": pm_details.get("transfer_account")
         }
         await db_ops.create(Collections.PAYMENTS, payment_doc)
+
+    # ── Auto-create commission records (non-blocking) ─────────────────────────
+    try:
+        await create_commission_records(
+            booking=created,
+            booking_type="umrah",
+            current_user=current_user,
+        )
+    except Exception as ce:
+        print(f"⚠️  Commission engine warning: {ce}")
 
     return created
 
@@ -335,9 +390,6 @@ async def get_umrah_bookings(
         oid = organization_id or current_user.get('organization_id') or current_user.get('sub')
         if oid:
             filter_query['organization_id'] = oid
-            # Ensure it's an organization-level booking (not branch or agency)
-            filter_query['branch_id'] = None
-            filter_query['agency_id'] = None
     elif role == 'agency' or entity_type == 'agency':
         aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['agency_id'] = aid

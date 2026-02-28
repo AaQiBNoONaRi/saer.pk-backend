@@ -8,6 +8,7 @@ from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from app.services.service_charge_logic import get_branch_service_charge, apply_ticket_charge
 
 router = APIRouter(prefix="/flights", tags=["Inventory: Flights"])
 
@@ -41,6 +42,18 @@ async def get_flights(
         ]
         
     flights = await db_ops.get_all(Collections.FLIGHTS, filter_query, skip=skip, limit=limit)
+    
+    # Apply service charges for branch users
+    branch_id = current_user.get("branch_id") or (current_user.get("entity_id") if current_user.get("entity_type") == "branch" else None)
+    
+    if branch_id:
+        rule = await get_branch_service_charge(branch_id)
+        if rule:
+            for flight in flights:
+                flight["adult_selling"] = apply_ticket_charge(flight.get("adult_selling", 0), rule)
+                flight["child_selling"] = apply_ticket_charge(flight.get("child_selling", 0), rule)
+                flight["infant_selling"] = apply_ticket_charge(flight.get("infant_selling", 0), rule)
+
     return serialize_docs(flights)
 
 @router.get("/{flight_id}", response_model=FlightResponse)
@@ -52,6 +65,17 @@ async def get_flight(
     flight = await db_ops.get_by_id(Collections.FLIGHTS, flight_id)
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
+        
+    # Apply service charges for branch users
+    branch_id = current_user.get("branch_id") or (current_user.get("entity_id") if current_user.get("entity_type") == "branch" else None)
+    
+    if branch_id:
+        rule = await get_branch_service_charge(branch_id)
+        if rule:
+            flight["adult_selling"] = apply_ticket_charge(flight.get("adult_selling", 0), rule)
+            flight["child_selling"] = apply_ticket_charge(flight.get("child_selling", 0), rule)
+            flight["infant_selling"] = apply_ticket_charge(flight.get("infant_selling", 0), rule)
+
     return serialize_doc(flight)
 
 @router.put("/{flight_id}", response_model=FlightResponse)

@@ -91,6 +91,7 @@ class Collections:
     BOOKING_EXPIRY = "booking_expiry"
     SERVICE_CHARGES = "service_charges"
     COMMISSIONS = "commissions"
+    COMMISSION_RECORDS = "commission_records"
     DISCOUNTS = "discounts"
     DISCOUNTED_HOTELS = "discounted_hotels"
     

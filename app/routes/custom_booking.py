@@ -5,12 +5,14 @@ from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import random, string, os, shutil
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from app.services.service_charge_logic import get_branch_service_charge, apply_ticket_charge, apply_package_charge, apply_hotel_charge
+from app.services.commission_service import create_commission_records
 from app.finance.journal_engine import create_custom_booking_journal
 
 router = APIRouter(prefix="/custom-bookings", tags=["Custom Bookings"])
@@ -71,9 +73,7 @@ class CustomBookingCreate(BaseModel):
     total_amount: float = 0
     discount_group_id: Optional[str] = None  # ID of the discount group applied
     discount_amount: Optional[float] = 0     # Calculated discount amount
-    payment_method: Optional[str] = None
-    payment_status: Optional[str] = None
-    payment_details: Optional[Dict[str, Any]] = None
+    payment_details: Optional[Dict[str, Any]] = Field(default_factory=dict)
     booking_status: str = "underprocess"
     # Voucher status — starts as Draft, updated during delivery
     voucher_status: Optional[str] = "Draft"
@@ -106,8 +106,6 @@ class CustomBookingUpdate(BaseModel):
     model_config = {"extra": "allow"}
     booking_status: Optional[str] = None
     voucher_status: Optional[str] = None
-    payment_method: Optional[str] = None
-    payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
     passengers: Optional[List[CustomPassengerData]] = None
@@ -191,9 +189,55 @@ async def create_custom_booking(
         current_user.get('email', 'Unknown')
     )
 
-    # ── If branch books directly, ensure agency_id is null ──
-    if role == 'branch':
+    # ── If branch/employee books directly, ensure agency_id is null ──
+    is_branch_user = (role == 'branch') or (current_user.get('entity_type') == 'branch')
+    is_agency_user = (role == 'agency')
+    
+    if is_branch_user:
         booking_dict['agency_id'] = None
+        
+    # ── Service Charge Enforcement for Branch and Area Agency users ──
+    agency_type = current_user.get('agency_type')
+    if is_branch_user or (is_agency_user and agency_type == 'area'):
+        branch_id_for_sc = branch_id or current_user.get('entity_id')
+        rule = await get_branch_service_charge(branch_id_for_sc)
+        if rule:
+            total_sc = 0
+            
+            # 1. Apply Hotel Charges (Overrides)
+            for room in booking_dict.get('rooms_selected', []):
+                hotel_id = room.get('hotel_id')
+                rtype = room.get('room_type', 'sharing').lower()
+                base_p = room.get('price_per_person', 0)
+                
+                inclusive_p = apply_hotel_charge(base_p, rule, hotel_id, rtype)
+                room['price_per_person'] = inclusive_p
+                total_sc += (inclusive_p - base_p) * room.get('quantity', 0)
+            
+            # 2. Recalculate total with hotel charges before applying package charge
+            current_total = booking_dict.get('total_amount', 0)
+            mid_total = current_total + sum((r['price_per_person'] - (r.get('base_price') or r['price_per_person'])) * r.get('quantity', 0) for r in booking_dict.get('rooms_selected', []))
+            # Actually simpler: just apply the package charge to the (already increased) total
+            # But the total_amount in payload might not have the increments yet.
+            
+            # Refined: Add the hotel increases to total_amount first
+            total_hotel_inc = sum((apply_hotel_charge(r.get('price_per_person', 0), rule, r.get('hotel_id'), r.get('room_type', 'sharing').lower()) - r.get('price_per_person', 0)) * r.get('quantity', 0) for r in booking_dict.get('rooms_selected', []))
+            # Wait, I already updated room['price_per_person'] above. 
+            # I should just use total_sc so far.
+            
+            booking_dict['total_amount'] += total_sc 
+            
+            # 3. Apply Overall Package Charge
+            has_package_elements = bool(booking_dict.get('rooms_selected')) or bool(booking_dict.get('visa_cost_pkr'))
+            
+            updated_total = booking_dict.get('total_amount', 0)
+            if has_package_elements:
+                final_total = apply_package_charge(updated_total, rule)
+                total_sc += (final_total - updated_total)
+                booking_dict['total_amount'] = final_total
+                
+            booking_dict['total_service_charge'] = total_sc
+            print(f"DEBUG: Applied Custom Service Charge of {total_sc} to booking. New Total: {booking_dict['total_amount']}")
 
     # ── fetch & embed full hierarchy documents ──
     if agency_id:
@@ -297,8 +341,9 @@ async def create_custom_booking(
         print(f"⚠️  Journal engine warning for {created.get('booking_reference')}: {je}")
         
     # ── Auto-create pending payment for bank/cash ───────────────────────────
-    pmt_method = booking_dict.get("payment_method")
-    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online"]:
+    pm_details = booking_dict.get("payment_details") or {}
+    pmt_method = pm_details.get("payment_method")
+    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online", "transfer"]:
         payment_doc = {
             "booking_id": str(created.get('_id')),
             "booking_type": "custom",
@@ -313,9 +358,25 @@ async def create_custom_booking(
             "created_by": booking_dict['created_by'],
             "created_at": booking_dict['created_at'],
             "updated_at": booking_dict['created_at'],
+            # Mirror transfer details to Payment record if present
+            "transfer_account_number": pm_details.get("transfer_account_number"),
+            "transfer_account_name": pm_details.get("transfer_account_name"),
+            "transfer_phone": pm_details.get("transfer_phone"),
+            "transfer_cnic": pm_details.get("transfer_cnic"),
+            "transfer_account": pm_details.get("transfer_account")
         }
         await db_ops.create(Collections.PAYMENTS, payment_doc)
         
+    # ── Auto-create commission records (non-blocking) ─────────────────────────
+    try:
+        await create_commission_records(
+            booking=serialize_doc(created),
+            booking_type="custom",
+            current_user=current_user,
+        )
+    except Exception as ce:
+        print(f"⚠️  Commission engine warning: {ce}")
+
     return serialize_doc(created)
 
 
@@ -340,9 +401,6 @@ async def get_custom_bookings(
         oid = organization_id or current_user.get('organization_id') or current_user.get('sub')
         if oid:
             filter_query['organization_id'] = oid
-            # Ensure it's an organization-level booking (not branch or agency)
-            filter_query['branch_id'] = None
-            filter_query['agency_id'] = None
     elif role == 'agency' or entity_type == 'agency':
         aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['agency_id'] = aid

@@ -7,7 +7,7 @@ from app.models.agency import AgencyCreate, AgencyUpdate, AgencyResponse
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs, calculate_available_credit
-from app.utils.auth import get_current_user, require_org_admin, require_branch_admin
+from app.utils.auth import get_current_user, require_org_admin, require_branch_admin, hash_password
 
 router = APIRouter(prefix="/agencies", tags=["Agencies"])
 
@@ -42,6 +42,11 @@ async def create_agency(
         )
     
     agency_dict = agency.model_dump()
+    
+    # Hash password if provided
+    if "password" in agency_dict:
+        agency_dict["password"] = hash_password(agency_dict["password"])
+        
     created_agency = await db_ops.create(Collections.AGENCIES, agency_dict)
     
     # Add available_credit field
@@ -162,6 +167,10 @@ async def update_agency(
 ):
     """Update agency (Branch Admin or higher)"""
     update_data = agency_update.model_dump(exclude_unset=True)
+    
+    # Hash password if being updated
+    if "password" in update_data:
+        update_data["password"] = hash_password(update_data["password"])
     
     if not update_data:
         raise HTTPException(

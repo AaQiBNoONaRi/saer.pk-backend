@@ -9,6 +9,7 @@ class AgencyBase(BaseModel):
     organization_id: str
     branch_id: str
     name: str = Field(..., min_length=1, max_length=200)
+    username: Optional[str] = None
     email: EmailStr
     phone: str = Field(..., max_length=20)
     address: Optional[str] = None
@@ -20,9 +21,10 @@ class AgencyBase(BaseModel):
     credit_limit: float = Field(default=0.0, ge=0)
     credit_used: float = Field(default=0.0, ge=0)
     is_active: bool = True
+    portal_access_enabled: bool = True
 
 class AgencyCreate(AgencyBase):
-    pass
+    password: str = Field(..., min_length=6)
 
 class AgencyUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
@@ -37,6 +39,9 @@ class AgencyUpdate(BaseModel):
     credit_limit: Optional[float] = Field(None, ge=0)
     credit_used: Optional[float] = Field(None, ge=0)
     is_active: Optional[bool] = None
+    portal_access_enabled: Optional[bool] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
 
 class AgencyResponse(AgencyBase):
     id: str = Field(alias="_id")
