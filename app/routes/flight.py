@@ -43,10 +43,14 @@ async def get_flights(
         
     flights = await db_ops.get_all(Collections.FLIGHTS, filter_query, skip=skip, limit=limit)
     
-    # Apply service charges for branch users
-    branch_id = current_user.get("branch_id") or (current_user.get("entity_id") if current_user.get("entity_type") == "branch" else None)
+    role = current_user.get("role")
+    entity_type = current_user.get("entity_type")
+    branch_id = current_user.get("branch_id") or (current_user.get("entity_id") if entity_type == "branch" else None)
     
-    if branch_id:
+    agency_type = current_user.get("agency_type")
+    is_portal_user = (role == "branch") or (role == "agency" and agency_type == "area") or (entity_type == "branch")
+    
+    if is_portal_user and branch_id:
         rule = await get_branch_service_charge(branch_id)
         if rule:
             for flight in flights:
@@ -66,10 +70,14 @@ async def get_flight(
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
         
-    # Apply service charges for branch users
-    branch_id = current_user.get("branch_id") or (current_user.get("entity_id") if current_user.get("entity_type") == "branch" else None)
+    role = current_user.get("role")
+    entity_type = current_user.get("entity_type")
+    branch_id = current_user.get("branch_id") or (current_user.get("entity_id") if entity_type == "branch" else None)
     
-    if branch_id:
+    agency_type = current_user.get("agency_type")
+    is_portal_user = (role == "branch") or (role == "agency" and agency_type == "area") or (entity_type == "branch")
+    
+    if is_portal_user and branch_id:
         rule = await get_branch_service_charge(branch_id)
         if rule:
             flight["adult_selling"] = apply_ticket_charge(flight.get("adult_selling", 0), rule)

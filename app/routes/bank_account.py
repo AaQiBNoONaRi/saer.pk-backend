@@ -43,23 +43,26 @@ async def create_bank_account(
     # Agency payload: {"role": "agency", "agency_id": "...", ...}
     
     # 1. Identify Actor
-    if current_user.get("role") == "branch":
+    is_branch = current_user.get("role") == "branch" or current_user.get("entity_type") == "branch"
+    is_agency = current_user.get("role") == "agency" or current_user.get("entity_type") == "agency"
+
+    if is_branch:
         # Branch acting
         if account.account_type != "Branch":
             raise HTTPException(status_code=403, detail="Branch can only create Branch accounts")
         
         # Enforce IDs
-        account_dict["branch_id"] = current_user["branch_id"]
+        account_dict["branch_id"] = current_user.get("branch_id") or current_user.get("entity_id")
         account_dict["organization_id"] = current_user["organization_id"]
         account_dict["agency_id"] = None
         
-    elif current_user.get("role") == "agency":
+    elif is_agency:
          # Agency acting
         if account.account_type != "Agency":
             raise HTTPException(status_code=403, detail="Agency can only create Agency accounts")
         
         # Enforce IDs
-        account_dict["agency_id"] = current_user["agency_id"]
+        account_dict["agency_id"] = current_user.get("agency_id") or current_user.get("entity_id")
         account_dict["organization_id"] = current_user["organization_id"]
         account_dict["branch_id"] = None
         
@@ -151,11 +154,14 @@ async def get_bank_accounts(
     query = {"is_active": True}
     
     # Identify Actor
-    if current_user.get("role") == "branch":
+    is_branch = current_user.get("role") == "branch" or current_user.get("entity_type") == "branch"
+    is_agency = current_user.get("role") == "agency" or current_user.get("entity_type") == "agency"
+
+    if is_branch:
         # Branch View
         # Logic: (account_type='Branch' AND branch_id=Me) OR (account_type='Organization' AND organization_id=MyOrg)
-        branch_id = current_user["branch_id"]
-        org_id = current_user["organization_id"]
+        branch_id = current_user.get("branch_id") or current_user.get("entity_id")
+        org_id = current_user.get("organization_id")
         
         or_conditions = [
             {"account_type": "Branch", "branch_id": branch_id},
@@ -165,7 +171,7 @@ async def get_bank_accounts(
             
         query["$or"] = or_conditions
         
-    elif current_user.get("role") == "agency":
+    elif is_agency:
         # Agency View
         agency_id = current_user.get("agency_id") or current_user.get("sub")
         org_id = current_user.get("organization_id")
@@ -230,16 +236,21 @@ async def update_bank_account(
     # 2. Verify Permission
     is_authorized = False
     
-    if current_user.get("role") == "branch":
+    is_branch = current_user.get("role") == "branch" or current_user.get("entity_type") == "branch"
+    is_agency = current_user.get("role") == "agency" or current_user.get("entity_type") == "agency"
+
+    if is_branch:
         # Can only update OWN Branch Accounts
+        branch_id = current_user.get("branch_id") or current_user.get("entity_id")
         if existing_account.get("account_type") == "Branch" and \
-           str(existing_account.get("branch_id")) == str(current_user["branch_id"]):
+           str(existing_account.get("branch_id")) == str(branch_id):
             is_authorized = True
             
-    elif current_user.get("role") == "agency":
+    elif is_agency:
         # Can only update OWN Agency Accounts
+        agency_id = current_user.get("agency_id") or current_user.get("entity_id")
         if existing_account.get("account_type") == "Agency" and \
-           str(existing_account.get("agency_id")) == str(current_user["agency_id"]):
+           str(existing_account.get("agency_id")) == str(agency_id):
             is_authorized = True
             
     else:
@@ -275,14 +286,19 @@ async def delete_bank_account(
     # 2. Verify Permission
     is_authorized = False
     
-    if current_user.get("role") == "branch":
+    is_branch = current_user.get("role") == "branch" or current_user.get("entity_type") == "branch"
+    is_agency = current_user.get("role") == "agency" or current_user.get("entity_type") == "agency"
+
+    if is_branch:
+        branch_id = current_user.get("branch_id") or current_user.get("entity_id")
         if existing_account.get("account_type") == "Branch" and \
-           str(existing_account.get("branch_id")) == str(current_user["branch_id"]):
+           str(existing_account.get("branch_id")) == str(branch_id):
             is_authorized = True
             
-    elif current_user.get("role") == "agency":
+    elif is_agency:
+        agency_id = current_user.get("agency_id") or current_user.get("entity_id")
         if existing_account.get("account_type") == "Agency" and \
-           str(existing_account.get("agency_id")) == str(current_user["agency_id"]):
+           str(existing_account.get("agency_id")) == str(agency_id):
             is_authorized = True
             
     else:

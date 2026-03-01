@@ -69,9 +69,14 @@ async def get_hotels(
 
     # ── Apply Service Charges for Branch Users ──
     role = current_user.get('role')
+    entity_type = current_user.get('entity_type')
     branch_id = current_user.get('branch_id') or (current_user.get('sub') if role == 'branch' else None)
+    
+    agency_type = current_user.get("agency_type")
+    is_portal_user = (role == "branch") or (role == "agency" and agency_type == "area") or (entity_type == "branch")
+    
     rule = None
-    if branch_id:
+    if is_portal_user and branch_id:
         rule = await get_branch_service_charge(branch_id)
 
     results = []

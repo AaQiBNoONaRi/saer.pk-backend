@@ -75,14 +75,22 @@ async def create_booking(
     booking_dict['created_by'] = current_user.get('email') or current_user.get('username')
     
     # Add agency/branch info from current user
-    if current_user.get('role') == 'agency':
-        aid = current_user.get('agency_id') or current_user.get('sub')
+    role = current_user.get('role')
+    entity_type = current_user.get('entity_type')
+    
+    if role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         booking_dict['agency_id'] = aid
-        booking_dict['agent_name'] = current_user.get('agency_name', 'Unknown')
-    elif current_user.get('role') == 'branch':
-        bid = current_user.get('branch_id') or current_user.get('sub')
+        booking_dict['agent_name'] = current_user.get('name') or current_user.get('full_name') or current_user.get('agency_name') or current_user.get('email', 'Unknown')
+        
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         booking_dict['branch_id'] = bid
-        booking_dict['agent_name'] = current_user.get('branch_name', 'Unknown')
+        booking_dict['agent_name'] = current_user.get('name') or current_user.get('full_name') or current_user.get('branch_name') or current_user.get('email', 'Unknown')
+        
+    booking_dict['booked_by_role'] = role
+    booking_dict['booked_by_id'] = current_user.get('_id') or current_user.get('sub')
+    booking_dict['booked_by_name'] = booking_dict.get('agent_name', 'Unknown')
     
     # Create booking in appropriate collection
     created_booking = await db_ops.create(booking_collection, booking_dict)
@@ -128,8 +136,7 @@ async def get_bookings(
     elif role == 'branch' or entity_type == 'branch':
         bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['branch_id'] = bid
-        # Only show bookings made directly by the branch
-        filter_query['booked_by_role'] = 'branch'
+        filter_query['agency_id'] = None
     
     if booking_status:
         filter_query['booking_status'] = booking_status
@@ -163,13 +170,16 @@ async def get_booking(
         raise HTTPException(status_code=404, detail="Booking not found")
     
     # Check authorization
-    if current_user.get('role') == 'agency':
-        aid = current_user.get('agency_id') or current_user.get('sub')
+    role = current_user.get('role')
+    entity_type = current_user.get('entity_type')
+    
+    if role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         if booking.get('agency_id') != aid:
             raise HTTPException(status_code=403, detail="Not authorized to view this booking")
-    elif current_user.get('role') == 'branch':
-        bid = current_user.get('branch_id') or current_user.get('sub')
-        if booking.get('branch_id') != bid:
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
+        if str(booking.get('branch_id')) != str(bid):
             raise HTTPException(status_code=403, detail="Not authorized to view this booking")
     
     return serialize_doc(booking)
@@ -191,13 +201,16 @@ async def update_booking(
         raise HTTPException(status_code=404, detail="Booking not found")
     
     # Check authorization
-    if current_user.get('role') == 'agency':
-        aid = current_user.get('agency_id') or current_user.get('sub')
+    role = current_user.get('role')
+    entity_type = current_user.get('entity_type')
+    
+    if role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         if booking.get('agency_id') != aid:
             raise HTTPException(status_code=403, detail="Not authorized to update this booking")
-    elif current_user.get('role') == 'branch':
-        bid = current_user.get('branch_id') or current_user.get('sub')
-        if booking.get('branch_id') != bid:
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
+        if str(booking.get('branch_id')) != str(bid):
             raise HTTPException(status_code=403, detail="Not authorized to update this booking")
     
     updated_booking = await db_ops.update(collection, booking_id, update_data)
@@ -217,13 +230,16 @@ async def cancel_booking(
         raise HTTPException(status_code=404, detail="Booking not found")
     
     # Check authorization
-    if current_user.get('role') == 'agency':
-        aid = current_user.get('agency_id') or current_user.get('sub')
+    role = current_user.get('role')
+    entity_type = current_user.get('entity_type')
+    
+    if role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         if booking.get('agency_id') != aid:
             raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
-    elif current_user.get('role') == 'branch':
-        bid = current_user.get('branch_id') or current_user.get('sub')
-        if booking.get('branch_id') != bid:
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
+        if str(booking.get('branch_id')) != str(bid):
             raise HTTPException(status_code=403, detail="Not authorized to cancel this booking")
     
     # Update booking status to cancelled

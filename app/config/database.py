@@ -52,11 +52,6 @@ class Collections:
     EMPLOYEES = "employees"
     CUSTOMERS = "customers"
     HOTELS = "hotels"
-    HOTEL_CATEGORIES = "hotel_categories"
-    HOTEL_FLOORS = "hotel_floors"
-    HOTEL_ROOMS = "hotel_rooms"
-    HOTEL_ROOM_BOOKINGS = "hotel_room_bookings"
-    BED_TYPES = "bed_types"
     FLIGHTS = "flights"
     TICKET_INVENTORY = "ticket_inventory"
     VISAS = "visas"
@@ -64,17 +59,18 @@ class Collections:
     FOOD = "food"
     ZIYARAT = "ziyarat"
     PACKAGES = "packages"
-    BOOKINGS = "bookings"
+    
+    # Separate Booking Collections
     TICKET_BOOKINGS = "ticket_bookings"
     UMRAH_BOOKINGS = "umrah_bookings"
     CUSTOM_BOOKINGS = "custom_bookings"
+    BOOKINGS = "bookings"  # Legacy - will be removed
+    
     LEDGER = "ledger"
     OPERATIONS = "operations"
     PAYMENTS = "payments"
-    ADMINS = "admins"
     BANK_ACCOUNTS = "bank_accounts"
-    BLOGS = "blogs"
-    FORMS = "forms"
+    ADMINS = "admins"
     
     # Others Management Collections
     RIYAL_RATES = "riyal_rates"
@@ -89,24 +85,15 @@ class Collections:
     FLIGHT_IATA = "flight_iata"
     CITY_IATA = "city_iata"
     BOOKING_EXPIRY = "booking_expiry"
-    SERVICE_CHARGES = "service_charges"
-    COMMISSIONS = "commissions"
-    COMMISSION_RECORDS = "commission_records"
+    
+    # Financial Collections
     DISCOUNTS = "discounts"
-    DISCOUNTED_HOTELS = "discounted_hotels"
+    COMMISSIONS = "commissions"
+    SERVICE_CHARGES = "service_charges"
     
     # Content Management Collections
     BLOGS = "blogs"
     FORMS = "forms"
-    FORM_SUBMISSIONS = "form_submissions"
-    
-    # HR Management Collections
-    HR_ATTENDANCE = "hr_attendance"
-    HR_MOVEMENT_LOGS = "hr_movement_logs"
-    HR_PUNCTUALITY_RECORDS = "hr_punctuality_records"
-    HR_LEAVE_REQUESTS = "hr_leave_requests"
-    HR_FINES = "hr_fines"
-    HR_SALARY_PAYMENTS = "hr_salary_payments"
     # Hotel PMS Collections
     HOTEL_CATEGORIES = "hotel_categories"
     BED_TYPES = "bed_types"
@@ -117,19 +104,3 @@ class Collections:
     # Shared Inventory Collections
     ORG_LINKS = "org_links"
     INVENTORY_SHARES = "inventory_shares"
-
-    # Payment Collections (Kuickapay)
-    VOUCHERS = "vouchers"
-    TRANSACTIONS = "transactions"
-    WALLETS = "wallets"
-
-    # CRM Collections
-    LEADS = "leads"
-    PASSPORT_LEADS = "passport_leads"
-    TASKS = "tasks"
-    CUSTOMERS = "customers"  # already set above, but alias here for clarity
-
-    # Finance & Accounting Collections
-    CHART_OF_ACCOUNTS = "chart_of_accounts"
-    JOURNAL_ENTRIES = "journal_entries"
-    AUDIT_TRAIL = "audit_trail"

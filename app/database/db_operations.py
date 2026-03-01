@@ -70,6 +70,17 @@ class DBOperations:
             {"$set": update_data}
         )
         return result
+        
+    @staticmethod
+    async def update_many(collection_name: str, filter_query: Dict, update_data: Dict) -> int:
+        """Update multiple documents by filter query"""
+        collection = db_config.get_collection(collection_name)
+        update_data["updated_at"] = datetime.utcnow()
+        result = await collection.update_many(
+            filter_query,
+            {"$set": update_data}
+        )
+        return result.modified_count
     
     @staticmethod
     async def delete(collection_name: str, doc_id: str) -> bool:

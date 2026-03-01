@@ -63,11 +63,18 @@ async def login(credentials: EmployeeLogin):
         except Exception as e:
             print(f"Failed to fetch group permissions: {e}")
     
-    # Include organization_id explicitly from DB (if present)
-    org_id = employee.get("organization_id") if employee.get("organization_id") else None
-    # Fallback: if entity_type is 'organization', derive from entity_id
-    if not org_id and employee.get("entity_type", "").lower() == "organization":
-        org_id = employee.get("entity_id") or None
+    org_id = employee.get("organization_id")
+    if not org_id:
+        if employee.get("entity_type", "").lower() == "organization":
+            org_id = employee.get("entity_id")
+        elif employee.get("entity_type", "").lower() == "branch":
+            branch = await db_ops.get_by_id(Collections.BRANCHES, employee.get("entity_id"))
+            if branch:
+                org_id = branch.get("organization_id")
+        elif employee.get("entity_type", "").lower() == "agency":
+            agency = await db_ops.get_by_id(Collections.AGENCIES, employee.get("entity_id"))
+            if agency:
+                org_id = agency.get("organization_id")
     token_data = {
         "_id": str(employee["_id"]),
         "emp_id": employee["emp_id"],
@@ -155,11 +162,18 @@ async def login_with_email(credentials: EmployeeEmailLogin):
             # If group fetch fails, use employee's stored permissions
             print(f"Failed to fetch group permissions: {e}")
     
-    # Include organization_id explicitly from DB (if present)
-    org_id = employee.get("organization_id") if employee.get("organization_id") else None
-    # Fallback: if entity_type is 'organization', derive from entity_id
-    if not org_id and employee.get("entity_type", "").lower() == "organization":
-        org_id = employee.get("entity_id") or None
+    org_id = employee.get("organization_id")
+    if not org_id:
+        if employee.get("entity_type", "").lower() == "organization":
+            org_id = employee.get("entity_id")
+        elif employee.get("entity_type", "").lower() == "branch":
+            branch = await db_ops.get_by_id(Collections.BRANCHES, employee.get("entity_id"))
+            if branch:
+                org_id = branch.get("organization_id")
+        elif employee.get("entity_type", "").lower() == "agency":
+            agency = await db_ops.get_by_id(Collections.AGENCIES, employee.get("entity_id"))
+            if agency:
+                org_id = agency.get("organization_id")
     token_data = {
         "_id": str(employee["_id"]),
         "emp_id": employee.get("emp_id", ""),

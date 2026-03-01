@@ -1051,6 +1051,19 @@ async def update_payment_status(
                 except Exception as je:
                     print(f"⚠️  Journal engine warning for payment approval {payment_id}: {je}")
                     
+                # ── Auto-Earn Commissions ──
+                if payment_status == "paid":
+                    try:
+                        b_ref = booking.get('booking_reference') or payment.get('booking_id')
+                        await db_ops.update_many(
+                            Collections.COMMISSION_RECORDS,
+                            {"booking_reference": b_ref},
+                            {"status": "earned", "trip_completion_date": datetime.utcnow()}
+                        )
+                        print(f"✅ Commission auto-earned for booking {b_ref}")
+                    except Exception as ce:
+                        print(f"⚠️ Error auto-earning commissions: {ce}")
+                    
         elif b_type == "manual":
             from app.finance.journal_engine import create_payment_received_journal
             try:

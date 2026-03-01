@@ -41,8 +41,44 @@ async def list_commission_records(
     if agency_id:     query["agency_id"] = agency_id
     if booking_type:  query["booking_type"] = booking_type
 
+    # ── Role-Based Access Control ──
+    role = current_user.get("role")
+    entity_type = current_user.get("entity_type")
+    
+    if role == "branch" or entity_type == "branch":
+        # Force the query to only return records belonging to this branch's hierarchy
+        branch_id_claim = current_user.get("branch_id") or current_user.get("entity_id") or current_user.get("sub")
+        query["branch_id"] = branch_id_claim
+    elif role == "agency" or entity_type == "agency":
+        # Force the query to only return records belonging to this agency
+        agency_id_claim = current_user.get("agency_id") or current_user.get("entity_id") or current_user.get("sub")
+        query["agency_id"] = agency_id_claim
+    
+    # ── Execute Query ──
     records = await db_ops.get_all(Collections.COMMISSION_RECORDS, query, skip=skip, limit=limit)
-    return serialize_docs(records)
+    serialized = serialize_docs(records)
+    
+    # Batch lookup booking statuses
+    from bson import ObjectId
+    booking_ids = {r.get('booking_id') for r in serialized if r.get('booking_id')}
+    booking_status_map = {}
+    
+    if booking_ids:
+        # We need to search across booking collections.
+        b_oids = [ObjectId(bid) if isinstance(bid, str) and len(bid) == 24 else bid for bid in booking_ids]
+        
+        for collection_name in [Collections.TICKET_BOOKINGS, Collections.UMRAH_BOOKINGS, Collections.CUSTOM_BOOKINGS]:
+            found_bookings = await db_ops.get_all(collection_name, {"_id": {"$in": b_oids}})
+            for b in found_bookings:
+                bid = str(b.get('_id') or b.get('id'))
+                status_val = b.get('booking_status') or b.get('status') or 'unknown'
+                booking_status_map[bid] = status_val
+
+    for r in serialized:
+        bid = r.get('booking_id')
+        r['booking_status'] = booking_status_map.get(bid, 'unknown')
+        
+    return serialized
 
 
 # ─── Detail ───────────────────────────────────────────────────────────────────
@@ -104,10 +140,10 @@ async def process_commission_payout(
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Commission record not found")
 
-    if record.get("status") != "earned":
+    if record.get("status") not in ["earned", "pending"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot process payout: current status is '{record.get('status')}' (must be 'earned')",
+            detail=f"Cannot process payout: current status is '{record.get('status')}' (must be 'earned' or 'pending')",
         )
 
     amount      = float(record.get("commission_amount", 0))
