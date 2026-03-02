@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
-from app.utils.auth import get_current_user, get_org_id
+from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/tasks", tags=["Task Management"])
 
@@ -45,9 +45,6 @@ class RemarkCreate(BaseModel):
 @router.post("/", summary="Create a new task", status_code=status.HTTP_201_CREATED)
 async def create_task(task: TaskCreate, current_user: dict = Depends(get_current_user)):
     """Create a new task (Customer or Internal)"""
-    org_id = (current_user.get("organization_id") or "").strip()
-    if not org_id and current_user.get("role") not in ("admin", "super_admin"):
-        raise HTTPException(status_code=403, detail="Organization context missing")
     if task.task_type not in ["customer", "internal"]:
         raise HTTPException(status_code=400, detail="Invalid task type")
 
@@ -68,10 +65,11 @@ async def create_task(task: TaskCreate, current_user: dict = Depends(get_current
          task_dict["employee_id"] = current_user.get("_id")
 
     # Scope
-    task_dict["organization_id"] = org_id
     entity_type = current_user.get("entity_type")
     entity_id = current_user.get("entity_id")
-    if entity_type == "branch":
+    if entity_type == "organization":
+        task_dict["organization_id"] = entity_id
+    elif entity_type == "branch":
         task_dict["branch_id"] = entity_id
     elif entity_type == "agency":
         task_dict["agency_id"] = entity_id
@@ -98,15 +96,9 @@ async def get_tasks(
     limit: int = Query(100, ge=1, le=500)
 ):
     """Retrieve tasks with filtering"""
-    org_id_caller = (current_user.get("organization_id") or "").strip()
-    filters: dict = {}
-    if org_id_caller:
-        filters["organization_id"] = org_id_caller
-    else:
-        if current_user.get("role") not in ("admin", "super_admin"):
-            raise HTTPException(status_code=403, detail="Organization context missing")
-        if organization_id:
-            filters["organization_id"] = organization_id
+    filters = {}
+    if organization_id:
+        filters["organization_id"] = organization_id
     if branch_id:
         filters["branch_id"] = branch_id
     if status:
@@ -122,9 +114,7 @@ async def get_tasks(
 async def update_task(task_id: str, updates: TaskUpdate, current_user: dict = Depends(get_current_user)):
     """Update a task's details or status"""
     existing = await db_ops.get_by_id(Collections.TASKS, task_id)
-    org_id = (current_user.get("organization_id") or "").strip()
-    is_super = current_user.get("role") in ("admin", "super_admin")
-    if not existing or (org_id and existing.get("organization_id") != org_id and not is_super):
+    if not existing:
         raise HTTPException(status_code=404, detail="Task not found")
 
     update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
@@ -138,9 +128,7 @@ async def update_task(task_id: str, updates: TaskUpdate, current_user: dict = De
 async def add_task_remark(task_id: str, remark: RemarkCreate, current_user: dict = Depends(get_current_user)):
     """Append a chat-style remark to a task"""
     existing = await db_ops.get_by_id(Collections.TASKS, task_id)
-    org_id = (current_user.get("organization_id") or "").strip()
-    is_super = current_user.get("role") in ("admin", "super_admin")
-    if not existing or (org_id and existing.get("organization_id") != org_id and not is_super):
+    if not existing:
         raise HTTPException(status_code=404, detail="Task not found")
 
     # Build author display name
@@ -174,9 +162,7 @@ async def add_task_remark(task_id: str, remark: RemarkCreate, current_user: dict
 async def delete_task(task_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a task permanently"""
     existing = await db_ops.get_by_id(Collections.TASKS, task_id)
-    org_id = (current_user.get("organization_id") or "").strip()
-    is_super = current_user.get("role") in ("admin", "super_admin")
-    if not existing or (org_id and existing.get("organization_id") != org_id and not is_super):
+    if not existing:
         raise HTTPException(status_code=404, detail="Task not found")
     
     await db_ops.delete(Collections.TASKS, task_id)
@@ -246,5 +232,3 @@ def _get_entity_name(current_user: dict) -> str:
     if entity_type == "agency":
         return current_user.get("agency_name") or "Agency"
     return current_user.get("role") or current_user.get("user_type") or ""
-
-
