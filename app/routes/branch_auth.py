@@ -26,17 +26,17 @@ async def branch_login(credentials: BranchLogin):
         branch = await db_ops.get_one(Collections.BRANCHES, {"email": credentials.username})
         
         if not branch:
-            print(f"  → Not found by email, trying by username...")
+            print(f"   Not found by email, trying by username...")
             branch = await db_ops.get_one(Collections.BRANCHES, {"username": credentials.username})
         
         if not branch:
-            print(f"  → Branch not found by email or username. Check the email in the database.")
+            print(f"   Branch not found by email or username. Check the email in the database.")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid username or password"
             )
         
-        print(f"  → Found branch: {branch.get('name')} | has_password: {bool(branch.get('password'))} | portal_enabled: {branch.get('portal_access_enabled', True)}")
+        print(f"   Found branch: {branch.get('name')} | has_password: {bool(branch.get('password'))} | portal_enabled: {branch.get('portal_access_enabled', True)}")
         
         # Check if portal access is enabled
         if not branch.get("portal_access_enabled", True):
@@ -55,7 +55,7 @@ async def branch_login(credentials: BranchLogin):
         # Verify password
         stored_password = branch.get("password") or branch.get("hashed_password")
         if not stored_password:
-            print(f"  → No password stored for this branch. Use 'Set Password' in the org portal.")
+            print(f"   No password stored for this branch. Use 'Set Password' in the org portal.")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="No password has been set for this branch. Please contact your organization admin to set the portal password."

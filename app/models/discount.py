@@ -2,19 +2,29 @@
 Discount model and schemas for pricing management
 """
 from pydantic import BaseModel, Field
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 from datetime import datetime, date
+
+class HotelDiscountItem(BaseModel):
+    quint_discount: float = 0
+    quad_discount: float = 0
+    triple_discount: float = 0
+    double_discount: float = 0
+    sharing_discount: float = 0
+    other_discount: float = 0
+    hotels: List[str] = []
+    valid_from: Optional[date] = None
+    valid_until: Optional[date] = None
 
 class DiscountBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
-    discount_type: Literal["fixed", "percentage"] = "fixed"
-    value: float = Field(..., gt=0)
-    applies_to: Literal["tickets", "packages", "hotels"] = "tickets"
-    room_type: Optional[str] = None  # For hotels: double, triple, quad, quint
+    ticket_discount: float = 0
+    ticket_discount_type: Literal["fixed", "percentage"] = "fixed"
+    package_discount: float = 0
+    package_discount_type: Literal["fixed", "percentage"] = "fixed"
+    hotel_discounts: List[HotelDiscountItem] = []
     is_active: bool = True
-    valid_from: Optional[date] = None
-    valid_until: Optional[date] = None
 
 class DiscountCreate(DiscountBase):
     pass
@@ -22,22 +32,21 @@ class DiscountCreate(DiscountBase):
 class DiscountUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
-    discount_type: Optional[Literal["fixed", "percentage"]] = None
-    value: Optional[float] = Field(None, gt=0)
-    applies_to: Optional[Literal["tickets", "packages", "hotels"]] = None
-    room_type: Optional[str] = None
+    ticket_discount: Optional[float] = None
+    ticket_discount_type: Optional[Literal["fixed", "percentage"]] = None
+    package_discount: Optional[float] = None
+    package_discount_type: Optional[Literal["fixed", "percentage"]] = None
+    hotel_discounts: Optional[List[HotelDiscountItem]] = None
     is_active: Optional[bool] = None
-    valid_from: Optional[date] = None
-    valid_until: Optional[date] = None
 
 class DiscountResponse(DiscountBase):
     id: str = Field(alias="_id")
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
     
     class Config:
         populate_by_name = True
         json_encoders = {
-            datetime: lambda v: v.isoformat(),
-            date: lambda v: v.isoformat()
+            datetime: lambda v: v.isoformat() if v else None,
+            date: lambda v: v.isoformat() if v else None
         }

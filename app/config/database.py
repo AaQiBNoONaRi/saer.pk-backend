@@ -24,16 +24,16 @@ class DatabaseConfig:
             self.database = self.client[self.DATABASE_NAME]
             # Test connection
             await self.client.admin.command('ping')
-            print(f"✅ Connected to MongoDB: {self.DATABASE_NAME}")
+            print(f"[OK] Connected to MongoDB: {self.DATABASE_NAME}")
         except Exception as e:
-            print(f"❌ Error connecting to MongoDB: {e}")
+            print(f"[ERROR] Error connecting to MongoDB: {e}")
             raise
     
     async def close_db(self):
         """Close MongoDB connection"""
         if self.client:
             self.client.close()
-            print("✅ MongoDB connection closed")
+            print("[OK] MongoDB connection closed")
     
     def get_collection(self, collection_name: str):
         """Get a specific collection"""
@@ -64,6 +64,7 @@ class Collections:
     TICKET_BOOKINGS = "ticket_bookings"
     UMRAH_BOOKINGS = "umrah_bookings"
     CUSTOM_BOOKINGS = "custom_bookings"
+    CUSTOMER_BOOKINGS = "customer_bookings"   # Public website bookings (no login)
     BOOKINGS = "bookings"  # Legacy - will be removed
     
     LEDGER = "ledger"

@@ -20,19 +20,19 @@ async def seed_first_admin():
     admins_collection = db["admins"]
     organizations_collection = db["organizations"]
     
-    print("🌱 Seeding first admin user...")
+    print(" Seeding first admin user...")
     
     # Check if admin already exists
     existing_admin = await admins_collection.find_one({"username": "admin"})
     if existing_admin:
-        print("⚠️  Admin user already exists. Skipping...")
+        print("  Admin user already exists. Skipping...")
         return
     
     # Get the first organization (or create a default one)
     organization = await organizations_collection.find_one()
     
     if not organization:
-        print("📝 Creating default organization...")
+        print(" Creating default organization...")
         org_doc = {
             "name": "Saer.Pk Head Office",
             "code": "SAER-HQ",
@@ -47,7 +47,7 @@ async def seed_first_admin():
         }
         result = await organizations_collection.insert_one(org_doc)
         organization = await organizations_collection.find_one({"_id": result.inserted_id})
-        print(f"✅ Created organization: {organization['name']}")
+        print(f" Created organization: {organization['name']}")
     
     # Create admin user
     admin_doc = {
@@ -63,13 +63,13 @@ async def seed_first_admin():
     }
     
     result = await admins_collection.insert_one(admin_doc)
-    print(f"✅ Created admin user: {admin_doc['username']}")
+    print(f" Created admin user: {admin_doc['username']}")
     print(f"   Email: {admin_doc['email']}")
     print(f"   Password: admin123")
     print(f"   Role: {admin_doc['role']}")
     print(f"   Organization: {organization['name']}")
-    print("\n🎉 First admin user created successfully!")
-    print("⚠️  IMPORTANT: Change the default password after first login!")
+    print("\n First admin user created successfully!")
+    print("  IMPORTANT: Change the default password after first login!")
     
     client.close()
 

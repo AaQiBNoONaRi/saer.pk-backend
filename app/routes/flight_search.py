@@ -6,7 +6,7 @@ import json
 import asyncio
 import httpx
 import websockets
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Depends
 from app.config.settings import settings
 from app.services.flight_auth_service import FlightAuthService
 from app.services.flight_search_service import FlightSearchService
@@ -20,6 +20,7 @@ from app.schemas.flight_schemas import (
     AuthTokenResponse,
 )
 from app.database.db_operations import db_ops
+from app.utils.auth import get_current_user
 from datetime import datetime
 
 router = APIRouter(prefix="/flight-search", tags=["Flight Search (AIQS)"])
@@ -128,17 +129,17 @@ async def _rest_post(path: str, payload: dict, id_token: str, timeout: int = 15)
         "Authorization": f"Bearer {id_token}",
         "Content-Type": "application/json",
     }
-    print(f"\n[REST] → POST {url}")
-    print(f"[REST] → Payload: {_json.dumps(payload)[:800]}")
+    print(f"\n[REST]  POST {url}")
+    print(f"[REST]  Payload: {_json.dumps(payload)[:800]}")
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.post(url, json=payload, headers=headers)
-        print(f"[REST] ← Status: {resp.status_code}")
+        print(f"[REST]  Status: {resp.status_code}")
         if resp.status_code >= 400:
             try:
                 err_body = resp.json()
             except Exception:
                 err_body = resp.text
-            print(f"[REST] ← Error body: {err_body}")
+            print(f"[REST]  Error body: {err_body}")
             raise Exception(f"AIQS REST {resp.status_code}: {err_body}")
         return resp.json()
 
@@ -248,9 +249,9 @@ async def validate_flight(req: FlightValidateRequest):
         }
 
         import json as _json
-        print(f"\n[VALIDATE] → REST payload: {_json.dumps(rest_payload)[:1200]}")
+        print(f"\n[VALIDATE]  REST payload: {_json.dumps(rest_payload)[:1200]}")
         result = await _rest_post("/api/air/validate", rest_payload, id_token, timeout=45)
-        print(f"[VALIDATE] ← response keys: {list(result.keys()) if result else 'empty'}")
+        print(f"[VALIDATE]  response keys: {list(result.keys()) if result else 'empty'}")
 
         # Parse the REST response: response.content.validateFareResponse
         content = result.get("response", {}).get("content", {})
@@ -271,7 +272,7 @@ async def validate_flight(req: FlightValidateRequest):
 
     except Exception as e:
         import traceback
-        print(f"[VALIDATE] ✗ Error: {e}")
+        print(f"[VALIDATE]  Error: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -445,13 +446,13 @@ async def get_meals(req: AncillaryRequest):
         }
 
         import json as _json
-        print(f"\n[MEALS] → supplier={req.supplierCode} supplierSpecific type={type(supplier_specific).__name__}")
-        print(f"[MEALS] → payload: {_json.dumps(rest_payload)[:1000]}")
+        print(f"\n[MEALS]  supplier={req.supplierCode} supplierSpecific type={type(supplier_specific).__name__}")
+        print(f"[MEALS]  payload: {_json.dumps(rest_payload)[:1000]}")
         try:
             result = await _rest_post("/api/air/getMeal", rest_payload, id_token, timeout=20)
         except Exception as rest_err:
             # Many airlines don't support meal ancillaries — return empty gracefully
-            print(f"[MEALS] ⚠ API returned error (likely not supported for this airline): {rest_err}")
+            print(f"[MEALS]  API returned error (likely not supported for this airline): {rest_err}")
             return {"meals": [], "supported": False, "message": "Meal ancillaries not available for this flight."}
 
         content = result.get("response", {}).get("content", {})
@@ -462,7 +463,7 @@ async def get_meals(req: AncillaryRequest):
 
     except Exception as e:
         import traceback
-        print(f"[MEALS] ✗ Error: {e}")
+        print(f"[MEALS]  Error: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -506,12 +507,12 @@ async def get_baggage(req: AncillaryRequest):
         }
 
         import json as _json
-        print(f"\n[BAGGAGE] → supplier={req.supplierCode}")
-        print(f"[BAGGAGE] → payload: {_json.dumps(rest_payload)[:1000]}")
+        print(f"\n[BAGGAGE]  supplier={req.supplierCode}")
+        print(f"[BAGGAGE]  payload: {_json.dumps(rest_payload)[:1000]}")
         try:
             result = await _rest_post("/api/air/getBaggage", rest_payload, id_token, timeout=20)
         except Exception as rest_err:
-            print(f"[BAGGAGE] ⚠ API returned error (likely not supported for this airline): {rest_err}")
+            print(f"[BAGGAGE]  API returned error (likely not supported for this airline): {rest_err}")
             return {"baggage": [], "supported": False, "message": "Extra baggage ancillaries not available for this flight."}
 
         content = result.get("response", {}).get("content", {})
@@ -522,7 +523,7 @@ async def get_baggage(req: AncillaryRequest):
 
     except Exception as e:
         import traceback
-        print(f"[BAGGAGE] ✗ Error: {e}")
+        print(f"[BAGGAGE]  Error: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -533,7 +534,10 @@ async def get_baggage(req: AncillaryRequest):
 # ─── 8. Book Flight (Create PNR) ─────────────────────────────────────────────
 
 @router.post("/book")
-async def book_flight(req: FlightBookRequest):
+async def book_flight(
+    req: FlightBookRequest,
+    current_user: dict = Depends(get_current_user)
+):
     """
     Create a PNR via AIQS REST API (/api/air/book — FlightBookRQ).
     Requires validated supplierSpecific (from /validate response) + passenger data.
@@ -686,15 +690,15 @@ async def book_flight(req: FlightBookRequest):
         }
 
         import json as _json
-        print(f"\n[BOOK] → REST payload: {_json.dumps(rest_payload)[:2000]}")
+        print(f"\n[BOOK]  REST payload: {_json.dumps(rest_payload)[:2000]}")
         result = await _rest_post("/api/air/book", rest_payload, id_token, timeout=60)
 
         # Log full response to diagnose parsing
-        print(f"[BOOK] ← FULL response: {_json.dumps(result)[:3000]}")
+        print(f"[BOOK]  FULL response: {_json.dumps(result)[:3000]}")
 
         # ── Parse booking response ────────────────────────────────────────
         resp_content = result.get("response", {}).get("content", {})
-        print(f"[BOOK] ← content keys: {list(resp_content.keys()) if resp_content else 'empty'}")
+        print(f"[BOOK]  content keys: {list(resp_content.keys()) if resp_content else 'empty'}")
 
         # AIQS returns bookFlightResult (not bookFlightRS)
         book_rs = (
@@ -703,7 +707,7 @@ async def book_flight(req: FlightBookRequest):
             or resp_content.get("bookingRS")
             or {}
         )
-        print(f"[BOOK] ← book_rs keys: {list(book_rs.keys()) if book_rs else 'empty'}")
+        print(f"[BOOK]  book_rs keys: {list(book_rs.keys()) if book_rs else 'empty'}")
 
         pnr = book_rs.get("pnr")
         booking_ref_id = book_rs.get("bookingRefId")
@@ -714,7 +718,7 @@ async def book_flight(req: FlightBookRequest):
         booking_fare = book_rs.get("fare")
         booking_status = book_rs.get("status", "HK")
 
-        print(f"[BOOK] ← parsed: pnr={pnr}, refId={booking_ref_id}, status={booking_status}")
+        print(f"[BOOK]  parsed: pnr={pnr}, refId={booking_ref_id}, status={booking_status}")
 
         # ── Save booking to MongoDB ─────────────────────────────────────────
         booking_doc = {
@@ -729,12 +733,18 @@ async def book_flight(req: FlightBookRequest):
             "inf": req.inf,
             "supplierCode": supplier_code,
             "bookedAt": datetime.utcnow().isoformat(),
+            # Ownership fields for visibility filtering
+            "created_by": current_user.get('email') or current_user.get('username'),
+            "agency_id": current_user.get('agency_id') or (current_user.get('sub') if current_user.get('role') == 'agency' else None),
+            "branch_id": current_user.get('branch_id') or (current_user.get('sub') if current_user.get('role') == 'branch' else None),
+            "organization_id": current_user.get('organization_id'),
+            "role": current_user.get('role')
         }
         try:
             await db_ops.create("flight_bookings", booking_doc)
-            print(f"[BOOK] ✓ Saved booking {booking_ref_id} to DB")
+            print(f"[BOOK]  Saved booking {booking_ref_id} to DB")
         except Exception as db_err:
-            print(f"[BOOK] ⚠ DB save failed (booking still succeeded): {db_err}")
+            print(f"[BOOK]  DB save failed (booking still succeeded): {db_err}")
 
         return {
             "status": booking_status,
@@ -748,7 +758,7 @@ async def book_flight(req: FlightBookRequest):
 
     except Exception as e:
         import traceback
-        print(f"[BOOK] ✗ Error: {e}")
+        print(f"[BOOK]  Error: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -758,9 +768,32 @@ async def book_flight(req: FlightBookRequest):
 
 # ─── List Saved Bookings ──────────────────────────────────────────────────────
 @router.get("/bookings")
-async def list_bookings(skip: int = 0, limit: int = 50):
-    """Return all flight bookings saved in the database."""
-    docs = await db_ops.get_all("flight_bookings", skip=skip, limit=limit)
+async def list_bookings(
+    skip: int = 0, 
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """Return all flight bookings saved in the database with role-based filtering."""
+    filter_query = {}
+    role = current_user.get('role')
+    entity_type = (current_user.get('entity_type') or '').lower()
+    entity_id = current_user.get('entity_id')
+    
+    if role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or entity_id or current_user.get('sub')
+        filter_query['agency_id'] = aid
+        if current_user.get('email'):
+            filter_query['created_by'] = current_user.get('email')
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or entity_id or current_user.get('sub')
+        filter_query['branch_id'] = bid
+        if current_user.get('email'):
+            filter_query['created_by'] = current_user.get('email')
+    elif role in ['organization', 'admin']:
+        if current_user.get('organization_id'):
+            filter_query['organization_id'] = current_user.get('organization_id')
+    
+    docs = await db_ops.get_all("flight_bookings", filter_query, skip=skip, limit=limit)
     # Serialize ObjectId to string
     for d in docs:
         d["_id"] = str(d.get("_id", ""))
@@ -777,8 +810,27 @@ class RetrieveBookingRequest(_BM):
     supplierCode: int = 2
 
 @router.post("/booking-detail")
-async def retrieve_booking_detail(req: RetrieveBookingRequest):
-    """Fetch full PNR details from AIQS using FlightRetrieveBookingRQ."""
+async def retrieve_booking_detail(
+    req: RetrieveBookingRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Fetch full PNR details from AIQS using FlightRetrieveBookingRQ with authorization check."""
+    # First, find the booking in our DB to check ownership
+    booking = await db_ops.get_one("flight_bookings", {"bookingRefId": req.bookingRefId})
+    if booking:
+        role = current_user.get('role')
+        entity_type = (current_user.get('entity_type') or '').lower()
+        entity_id = current_user.get('entity_id')
+
+        if role == 'agency' or entity_type == 'agency':
+            aid = current_user.get('agency_id') or entity_id or current_user.get('sub')
+            if booking.get('agency_id') != aid or booking.get('created_by') != current_user.get('email'):
+                 raise HTTPException(status_code=403, detail="Not authorized to view this booking")
+        elif role == 'branch' or entity_type == 'branch':
+            bid = current_user.get('branch_id') or entity_id or current_user.get('sub')
+            if booking.get('branch_id') != bid or booking.get('created_by') != current_user.get('email'):
+                 raise HTTPException(status_code=403, detail="Not authorized to view this booking")
+    
     try:
         tokens = await FlightAuthService.get_tokens()
         id_token = tokens["id_token"]
@@ -812,18 +864,18 @@ async def retrieve_booking_detail(req: RetrieveBookingRequest):
             }
         }
 
-        print(f"[RETRIEVE] → bookingRefId={req.bookingRefId}")
+        print(f"[RETRIEVE]  bookingRefId={req.bookingRefId}")
         # Correct AIQS endpoint for PNR retrieval
         result = await _rest_post("/api/air/retrievePNR", payload, id_token, timeout=30)
         content = result.get("response", {}).get("content", {})
-        print(f"[RETRIEVE] ← content keys: {list(content.keys())}")
+        print(f"[RETRIEVE]  content keys: {list(content.keys())}")
         return result
 
     except HTTPException:
         raise
     except Exception as e:
         import traceback
-        print(f"[RETRIEVE] ✗ Error: {e}")
+        print(f"[RETRIEVE]  Error: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -867,17 +919,17 @@ async def update_passport(req: UpdatePassportRequest):
             }
         }
 
-        print(f"[UPDATE-PASSPORT] → bookingRefId={req.bookingRefId}, pax={len(req.travelerInfo)}")
+        print(f"[UPDATE-PASSPORT]  bookingRefId={req.bookingRefId}, pax={len(req.travelerInfo)}")
         result = await _rest_post("/api/air/book", payload, id_token, timeout=30)
         content = result.get("response", {}).get("content", {})
-        print(f"[UPDATE-PASSPORT] ← content keys: {list(content.keys())}")
+        print(f"[UPDATE-PASSPORT]  content keys: {list(content.keys())}")
         return result
 
     except HTTPException:
         raise
     except Exception as e:
         import traceback
-        print(f"[UPDATE-PASSPORT] ✗ Error: {e}")
+        print(f"[UPDATE-PASSPORT]  Error: {e}")
         traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

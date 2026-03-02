@@ -187,7 +187,7 @@ async def process_commission_payout(
             )
             journal_id = journal.get("_id") or journal.get("id")
     except Exception as e:
-        print(f"⚠️ Commission journal warning: {e}")
+        print(f" Commission journal warning: {e}")
 
     now = datetime.utcnow()
     updated = await db_ops.update(Collections.COMMISSION_RECORDS, record_id, {

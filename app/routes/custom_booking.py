@@ -3,7 +3,7 @@ Custom Package Booking routes - self-contained, no BookingCreate model dependenc
 """
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 import random, string, os, shutil
 from pydantic import BaseModel
 
@@ -108,12 +108,18 @@ async def create_custom_booking(
     booking_dict['booking_type']      = 'custom'
     booking_dict['booking_reference'] = generate_booking_reference()
     booking_dict['created_by']        = current_user.get('email') or current_user.get('username')
-    booking_dict['created_at']        = datetime.utcnow().isoformat()
+    now_utc = datetime.utcnow()
+    booking_dict['created_at']        = now_utc.isoformat()
+    booking_dict['payment_deadline']  = (now_utc + timedelta(hours=24)).isoformat()
 
     # ── resolve IDs from JWT ──
     role      = current_user.get('role')
     agency_id = current_user.get('agency_id') or (current_user.get('sub') if role == 'agency' else None)
-    branch_id = current_user.get('branch_id') or (current_user.get('sub') if role == 'branch' else None)
+    branch_id = (
+        current_user.get('branch_id') or
+        (current_user.get('sub') if role == 'branch' else None) or
+        (current_user.get('entity_id') if current_user.get('entity_type') == 'branch' else None)
+    )
     org_id    = current_user.get('organization_id')
 
     booking_dict['agency_id']       = agency_id
@@ -148,6 +154,17 @@ async def create_custom_booking(
     created = await db_ops.create(Collections.CUSTOM_BOOKINGS, booking_dict)
     return serialize_doc(created)
 
+async def _ensure_payment_deadline(booking: dict, collection) -> dict:
+    """If payment_deadline is missing, derive it from created_at + 24h and persist."""
+    if not booking.get('payment_deadline') and booking.get('created_at'):
+        try:
+            deadline = (datetime.fromisoformat(booking['created_at']) + timedelta(hours=24)).isoformat()
+        except Exception:
+            deadline = (datetime.utcnow() + timedelta(hours=24)).isoformat()
+        booking['payment_deadline'] = deadline
+        await db_ops.update(collection, str(booking.get('_id', '')), {'payment_deadline': deadline})
+    return booking
+
 
 @router.get("/")
 async def get_custom_bookings(
@@ -159,10 +176,23 @@ async def get_custom_bookings(
     current_user: dict = Depends(get_current_user)
 ):
     filter_query = {}
-    if current_user.get('role') == 'agency':
-        filter_query['agency_id'] = current_user.get('agency_id') or current_user.get('sub')
-    elif current_user.get('role') == 'branch':
-        filter_query['branch_id'] = current_user.get('branch_id') or current_user.get('sub')
+    # Filter by agency/branch
+    role = current_user.get('role')
+    entity_type = (current_user.get('entity_type') or '').lower()
+    entity_id = current_user.get('entity_id')
+
+    if role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or entity_id or current_user.get('sub')
+        filter_query['agency_id'] = aid
+        # Restrict to only bookings created by this user/email
+        if current_user.get('email'):
+            filter_query['created_by'] = current_user.get('email')
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or entity_id or current_user.get('sub')
+        filter_query['branch_id'] = bid
+        # Restrict to only bookings created by this user/email
+        if current_user.get('email'):
+            filter_query['created_by'] = current_user.get('email')
     if booking_status:
         filter_query['booking_status'] = booking_status
     if payment_status:
@@ -170,7 +200,11 @@ async def get_custom_bookings(
     if booking_reference:
         filter_query['booking_reference'] = {"$regex": booking_reference, "$options": "i"}
     bookings = await db_ops.get_all(Collections.CUSTOM_BOOKINGS, filter_query, skip=skip, limit=limit)
-    return serialize_docs(bookings)
+    enriched = []
+    for b in bookings:
+        b = await _ensure_payment_deadline(b, Collections.CUSTOM_BOOKINGS)
+        enriched.append(b)
+    return serialize_docs(enriched)
 
 
 @router.get("/{booking_id}")

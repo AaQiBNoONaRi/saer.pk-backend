@@ -133,10 +133,14 @@ async def get_bookings(
     elif role == 'agency' or entity_type == 'agency':
         aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['agency_id'] = aid
+        if current_user.get('email'):
+            filter_query['created_by'] = current_user.get('email')
     elif role == 'branch' or entity_type == 'branch':
         bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['branch_id'] = bid
         filter_query['agency_id'] = None
+        if current_user.get('email'):
+            filter_query['created_by'] = current_user.get('email')
     
     if booking_status:
         filter_query['booking_status'] = booking_status

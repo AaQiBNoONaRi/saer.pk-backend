@@ -40,6 +40,24 @@ from app.routes import (
     bank_account,
     blog,
     form,
+    # HR, Payments, Operations, Pax Movement, Commission Records
+    hr,
+    payment,
+    operations,
+    pax_movement,
+    commission_records,
+    # CRM, Bookings, Role Groups, Tasks, Debug
+    booking,
+    customers,
+    leads,
+    passport_leads,
+    role_groups,
+    tasks,
+    debug,
+    discounted_hotels,
+    ticket_inventory,
+    dashboard,
+    customer_booking,
 )
 
 
@@ -48,11 +66,11 @@ async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events"""
     # Startup
     await db_config.connect_db()
-    print(f"🚀 {settings.APP_NAME} v{settings.VERSION} started")
+    print(f"[START] {settings.APP_NAME} v{settings.VERSION} started")
     yield
     # Shutdown
     await db_config.close_db()
-    print("👋 Application shutdown")
+    print("[STOP] Application shutdown")
 
 # Create FastAPI app
 app = FastAPI(
@@ -70,11 +88,13 @@ app.add_middleware(
         "http://localhost:5175",
         "http://localhost:5176",
         "http://localhost:5177",
+        "http://localhost:5178",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
         "http://127.0.0.1:5176",
         "http://127.0.0.1:5177",
+        "http://127.0.0.1:5178",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -98,20 +118,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     # Round-trip through json with default=str to handle non-serializable objects (e.g. ValueError)
     safe_errors = json.loads(json.dumps(exc.errors(), default=str))
     print("\n" + "="*60)
-    print(f"❌ 422 VALIDATION ERROR on {request.method} {request.url.path}")
-    print(f"📋 ERRORS: {json.dumps(safe_errors, indent=2)}")
+    print(f"[422] VALIDATION ERROR on {request.method} {request.url.path}")
+    print(f"[ERRORS] {json.dumps(safe_errors, indent=2)}")
     if body:
-        print(f"📦 BODY SENT: {json.dumps(body, indent=2, default=str)}")
+        print(f"[BODY] {json.dumps(body, indent=2, default=str)}")
     print("="*60 + "\n")
     return JSONResponse(status_code=422, content={"detail": safe_errors})
 
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
-    print(f"\n🌐 {request.method} {request.url.path}")
+    print(f"\n[REQ] {request.method} {request.url.path}")
     response = await call_next(request)
     duration = time.time() - start_time
-    print(f"✅ {request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
+    print(f"[RES] {request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
     return response
 
 # Mount static files
@@ -157,6 +177,26 @@ app.include_router(bank_account.router, prefix="/api")
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
 app.include_router(custom_booking.router, prefix="/api")
+app.include_router(customer_booking.router, prefix="/api")
+app.include_router(dashboard.router, prefix="/api")
+
+# HR, Payments, Operations, Pax Movement, Commission Records
+app.include_router(hr.router, prefix="/api")
+app.include_router(payment.router, prefix="/api")
+app.include_router(operations.router, prefix="/api")
+app.include_router(pax_movement.router, prefix="/api")
+app.include_router(commission_records.router, prefix="/api")
+
+# CRM, Bookings, Role Groups, Tasks, Debug, Discounted Hotels
+app.include_router(booking.router, prefix="/api")
+app.include_router(customers.router, prefix="/api")
+app.include_router(leads.router, prefix="/api")
+app.include_router(passport_leads.router, prefix="/api")
+app.include_router(role_groups.router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")
+app.include_router(debug.router, prefix="/api")
+app.include_router(discounted_hotels.router, prefix="/api")
+app.include_router(ticket_inventory.router, prefix="/api")
 
 
 

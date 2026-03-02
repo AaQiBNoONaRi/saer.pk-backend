@@ -71,6 +71,8 @@ async def get_bookings(
 ):
     """Get bookings with filters"""
     filter_query = {}
+    
+    # 1. Functional Filters
     if hotel_id:
         filter_query["hotel_id"] = hotel_id
     if room_id:
@@ -79,8 +81,6 @@ async def get_bookings(
         filter_query["client_name"] = {"$regex": client_name, "$options": "i"}
     if status_filter:
         filter_query["status"] = status_filter
-        
-    # Date Range Overlap Filter (Find bookings falling within requested range)
     if date_from and date_to:
          filter_query["$or"] = [
             {
@@ -88,7 +88,24 @@ async def get_bookings(
                 "date_to": {"$gte": date_from.isoformat()}
             }
         ]
-        
+
+    # 2. Authorization and Visibility Filtering by Role
+    role = current_user.get('role')
+    entity_type = (current_user.get('entity_type') or '').lower()
+    entity_id = current_user.get('entity_id')
+
+    if role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or entity_id or current_user.get('sub')
+        filter_query['agency_id'] = aid
+        if current_user.get('email'):
+            filter_query['created_by'] = current_user.get('email')
+    elif role == 'branch' or entity_type == 'branch':
+        bid = current_user.get('branch_id') or entity_id or current_user.get('sub')
+        filter_query['branch_id'] = bid
+        if current_user.get('email'):
+            filter_query['created_by'] = current_user.get('email')
+    # Organization roles/admins see everything (no extra filter)
+
     bookings = await db_ops.get_all(Collections.HOTEL_ROOM_BOOKINGS, filter_query)
     return serialize_docs(bookings)
 

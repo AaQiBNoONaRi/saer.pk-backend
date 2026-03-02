@@ -110,7 +110,7 @@ async def _get_commission_rule(group_id: Optional[str], expected_type: Optional[
             # Try finding it without type check just to log a warning if it exists but type is wrong
             exists_with_wrong_type = await coll.find_one({"_id": ObjectId(group_id)})
             if exists_with_wrong_type:
-                print(f"⚠️  Commission group {group_id} found but type is '{exists_with_wrong_type.get('applied_to')}', expected '{expected_type}'")
+                print(f"  Commission group {group_id} found but type is '{exists_with_wrong_type.get('applied_to')}', expected '{expected_type}'")
         
         return serialize_doc(doc) if doc else None
     except Exception:
@@ -239,7 +239,7 @@ async def create_commission_records(
             print(f"DEBUG commission: is_branch_employee={is_branch_employee}, employee_id={employee_id}, user_type={user_type}, entity_type={entity_type}")
             employee = await _get_employee(employee_id) if employee_id else None
             if not employee and employee_id:
-                print(f"⚠️ Employee {employee_id} not found for commission")
+                print(f" Employee {employee_id} not found for commission")
             if employee:
                 earners_to_create.append((
                     "employee",
@@ -316,8 +316,8 @@ async def create_commission_records(
             }
 
             await coll.insert_one(record)
-            print(f"💰 Commission created: {earner_type} '{earner_name}' earns {amount} for booking {booking_ref}")
+            print(f" Commission created: {earner_type} '{earner_name}' earns {amount} for booking {booking_ref}")
 
     except Exception as e:
         # Never block a booking due to commission errors
-        print(f"⚠️ Commission engine warning for booking {booking.get('booking_reference','?')}: {e}")
+        print(f" Commission engine warning for booking {booking.get('booking_reference','?')}: {e}")
