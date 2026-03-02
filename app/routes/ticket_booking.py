@@ -238,12 +238,14 @@ async def get_ticket_bookings(
     role = current_user.get('role', '')
     entity_type = (current_user.get('entity_type') or '').lower()
     
+    org_id = current_user.get("organization_id")
+    if not org_id and role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Organization context missing")
+
     # Organization scoping: for admins, super_admins, and organization employees
     if role in ('organization', 'org', 'admin', 'super_admin') or entity_type in ('organization', 'org'):
-        # Org users see all bookings under their org EXCLUDING those made by child branches/agencies
-        oid = current_user.get('organization_id') or current_user.get('sub')
-        if oid:
-            filter_query['organization_id'] = oid
+        if org_id:
+            filter_query['organization_id'] = str(org_id)
             # Ensure it's an organization-level booking (not branch or agency)
             filter_query['branch_id'] = None
             filter_query['agency_id'] = None
@@ -273,7 +275,9 @@ async def get_ticket_booking(
 ):
     """Get ticket booking by ID"""
     booking = await db_ops.get_by_id(Collections.TICKET_BOOKINGS, booking_id)
-    if not booking:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not booking or (org_id and booking.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Ticket booking not found")
     
     # Check authorization
@@ -295,6 +299,13 @@ async def update_ticket_booking(
     current_user: dict = Depends(get_current_user)
 ):
     """Update ticket booking status/details — direct MongoDB update, no pre-GET needed."""
+    
+    # Pre-flight check for ownership
+    existing = await db_ops.get_by_id(Collections.TICKET_BOOKINGS, booking_id)
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not existing or (org_id and existing.get("organization_id") != org_id and not is_super):
+        raise HTTPException(status_code=404, detail="Booking not found")
     from datetime import datetime
 
     update_data = booking_update.model_dump(exclude_unset=True)
@@ -355,7 +366,9 @@ async def cancel_ticket_booking(
 ):
     """Cancel ticket booking and restore flight inventory"""
     booking = await db_ops.get_by_id(Collections.TICKET_BOOKINGS, booking_id)
-    if not booking:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not booking or (org_id and booking.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Ticket booking not found")
     
     # Check authorization

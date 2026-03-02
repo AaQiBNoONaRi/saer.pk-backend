@@ -11,8 +11,8 @@ from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs, generate_employee_id
 from app.utils.auth import (
-    get_current_user, require_org_admin, hash_password, 
-    verify_password, create_access_token
+    get_current_user, require_org_admin, hash_password,
+    verify_password, create_access_token, get_org_id
 )
 
 router = APIRouter(prefix="/employees", tags=["Employees"])
@@ -306,7 +306,15 @@ async def create_employee(
     # Hash password
     password = employee_dict.pop("password")
     employee_dict["hashed_password"] = hash_password(password)
-    
+
+    # Stamp organization_id: prefer explicit organization_id, else derive from entity
+    if not employee_dict.get("organization_id"):
+        org_from_token = (current_user.get("organization_id") or "").strip()
+        if org_from_token:
+            employee_dict["organization_id"] = org_from_token
+        elif employee_dict.get("entity_type", "").lower() == "organization":
+            employee_dict["organization_id"] = employee_dict.get("entity_id", "")
+
     created_employee = await db_ops.create(Collections.EMPLOYEES, employee_dict)
     return serialize_doc(created_employee)
 
@@ -319,13 +327,27 @@ async def get_employees(
     limit: int = 20,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get all employees, optionally filtered by entity"""
-    filter_query = {}
+    """Get employees – always scoped to the caller's organization"""
+    # Derive org_id from JWT
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+
+    filter_query: dict = {}
+
+    if org_id:
+        # Scope to this org via organization_id field OR entity_id when entity_type=organization
+        filter_query["$or"] = [
+            {"organization_id": org_id},
+            {"entity_type": "organization", "entity_id": org_id},
+        ]
+    elif not is_super:
+        raise HTTPException(status_code=403, detail="No organization context")
+
     if entity_type:
         filter_query["entity_type"] = entity_type
     if entity_id:
         filter_query["entity_id"] = entity_id
-    
+
     employees = await db_ops.get_all(Collections.EMPLOYEES, filter_query, skip=skip, limit=limit)
     return serialize_docs(employees)
 
@@ -347,16 +369,20 @@ async def get_employee(
     emp_id: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Get employee by emp_id or MongoDB ObjectId"""
+    """Get employee by emp_id or MongoDB ObjectId – org-ownership verified"""
     from bson import ObjectId
-    
     query = {"_id": ObjectId(emp_id)} if len(emp_id) == 24 and all(c in '0123456789abcdefABCDEF' for c in emp_id) else {"emp_id": emp_id}
     employee = await db_ops.get_one(Collections.EMPLOYEES, query)
     if not employee:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Employee not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
+    # Verify ownership (unless super-admin)
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and not is_super:
+        emp_org = (employee.get("organization_id") or "").strip()
+        emp_entity_org = employee.get("entity_id", "") if employee.get("entity_type", "").lower() == "organization" else ""
+        if emp_org != org_id and emp_entity_org != org_id:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Employee not found")
     return serialize_doc(employee)
 
 

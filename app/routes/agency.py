@@ -61,6 +61,25 @@ async def get_agencies(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all agencies, optionally filtered by organization or branch"""
+    org_id_caller = current_user.get("organization_id")
+    role = current_user.get("role")
+    permissions = current_user.get("permissions", [])
+    
+    # Allow admins, super_admins, or users with entities.agencies.view to see all agencies
+    has_view_permission = (
+        role in ("admin", "super_admin") or
+        "entities.agencies.view" in permissions or
+        "entities.agencies.all" in permissions
+    )
+    
+    if not has_view_permission:
+        if not org_id_caller:
+            raise HTTPException(status_code=403, detail="Organization context missing")
+        organization_id = org_id_caller
+        # Also enforce branch if the caller is a branch
+        if role == "branch":
+            branch_id = current_user.get("branch_id") or current_user.get("sub")
+            
     filter_query = {}
     if organization_id:
         filter_query["organization_id"] = organization_id
@@ -128,7 +147,9 @@ async def get_agency(
 ):
     """Get agency by ID"""
     agency = await db_ops.get_by_id(Collections.AGENCIES, agency_id)
-    if not agency:
+    org_id_caller = current_user.get("organization_id")
+    role = current_user.get("role")
+    if not agency or (org_id_caller and agency.get("organization_id") != org_id_caller and role not in ("admin", "super_admin")):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agency not found"
@@ -205,9 +226,11 @@ async def get_agency_stats(
     """Get statistics for an agency including bookings and payment performance"""
     from datetime import datetime, timedelta
     
-    # Verify agency exists
+    # Verify agency exists and scoped
     agency = await db_ops.get_by_id(Collections.AGENCIES, agency_id)
-    if not agency:
+    org_id_caller = current_user.get("organization_id")
+    role = current_user.get("role")
+    if not agency or (org_id_caller and agency.get("organization_id") != org_id_caller and role not in ("admin", "super_admin")):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Agency not found"

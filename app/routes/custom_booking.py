@@ -335,11 +335,13 @@ async def get_custom_bookings(
     role = current_user.get('role', '')
     entity_type = (current_user.get('entity_type') or '').lower()
 
+    org_id = current_user.get("organization_id")
+    if not org_id and role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Organization context missing")
+
     if role in ('organization', 'org', 'admin', 'super_admin') or entity_type in ('organization', 'org'):
-        # Org users see all bookings under their org EXCLUDING those made by child branches/agencies
-        oid = organization_id or current_user.get('organization_id') or current_user.get('sub')
-        if oid:
-            filter_query['organization_id'] = oid
+        if org_id:
+            filter_query['organization_id'] = str(org_id)
             # Ensure it's an organization-level booking (not branch or agency)
             filter_query['branch_id'] = None
             filter_query['agency_id'] = None
@@ -383,7 +385,9 @@ async def get_custom_bookings(
 @router.get("/{booking_id}")
 async def get_custom_booking(booking_id: str, current_user: dict = Depends(get_current_user)):
     booking = await db_ops.get_by_id(Collections.CUSTOM_BOOKINGS, booking_id)
-    if not booking:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not booking or (org_id and booking.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Custom booking not found")
         
     booking_data = serialize_doc(booking)
@@ -406,11 +410,12 @@ async def update_custom_booking(
     current_user: dict = Depends(get_current_user)
 ):
     update_data = booking_update.model_dump(exclude_unset=True)
-    print(f"DEBUG: update_custom_booking update_data keys: {list(update_data.keys())}")
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
     booking = await db_ops.get_by_id(Collections.CUSTOM_BOOKINGS, booking_id)
-    if not booking:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not booking or (org_id and booking.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Custom booking not found")
 
     # ── Expand package_details into dot-notation to do a deep merge ──
@@ -432,6 +437,8 @@ async def update_custom_booking(
 @router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def cancel_custom_booking(booking_id: str, current_user: dict = Depends(get_current_user)):
     booking = await db_ops.get_by_id(Collections.CUSTOM_BOOKINGS, booking_id)
-    if not booking:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not booking or (org_id and booking.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Custom booking not found")
     await db_ops.update(Collections.CUSTOM_BOOKINGS, booking_id, {"booking_status": "cancelled"})

@@ -56,6 +56,9 @@ class FlightBase(BaseModel):
     # Reselling configuration
     allow_reselling: bool = False
     
+    # Booking Reference
+    pnr: Optional[str] = None
+    
     # Status
     is_active: bool = True
 
@@ -75,6 +78,7 @@ class FlightUpdate(BaseModel):
     total_seats: Optional[int] = Field(None, ge=1)
     available_seats: Optional[int] = Field(None, ge=0)
     allow_reselling: Optional[bool] = None
+    pnr: Optional[str] = None
     is_active: Optional[bool] = None
 
 class FlightResponse(FlightBase):

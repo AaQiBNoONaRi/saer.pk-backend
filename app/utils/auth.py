@@ -212,3 +212,65 @@ def has_module_permission(current_user: Dict, module_code: str, action: str) -> 
 
     # also allow startswith checks for broader permissions
     return any(p.startswith(module_code) for p in perms)
+
+
+# ─── Org-isolation helpers ────────────────────────────────────────────────────
+
+def get_org_id(current_user: Dict = Depends(get_current_user)) -> str:
+    """
+    FastAPI dependency: extract organization_id from the JWT and return it.
+    Raises HTTP 403 if the token has no organization_id (e.g. bare agency token).
+    Use this on every endpoint that must be org-scoped.
+    """
+    org_id = current_user.get("organization_id") or current_user.get("sub")
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No organization associated with this account.",
+        )
+    return str(org_id)
+
+
+async def get_shared_org_ids(org_id: str, inventory_type: str) -> list:
+    """
+    Return [org_id] + all other org IDs that have an *accepted* inventory_share
+    link with this org covering the requested inventory_type.
+
+    inventory_type values: 'hotels', 'packages', 'tickets'
+    """
+    from app.config.database import Collections as _C, db_config as _db
+
+    # Find all active accepted links where this org is one of the two parties
+    links_col = _db.get_collection(_C.ORG_LINKS)
+    links = await links_col.find({
+        "$or": [{"org_low_id": org_id}, {"org_high_id": org_id}],
+        "status": "accepted",
+        "is_active": True,
+    }).to_list(length=100)
+
+    linked_org_ids = []
+    for link in links:
+        other = link["org_high_id"] if link["org_low_id"] == org_id else link["org_low_id"]
+        linked_org_ids.append(other)
+
+    if not linked_org_ids:
+        return [org_id]
+
+    # Check which linked orgs have an accepted inventory_share for this type
+    shares_col = _db.get_collection(_C.INVENTORY_SHARES)
+    shared_orgs = []
+    for other_id in linked_org_ids:
+        share = await shares_col.find_one({
+            "$or": [
+                {"from_org_id": org_id, "to_org_id": other_id},
+                {"from_org_id": other_id, "to_org_id": org_id},
+            ],
+            "status": "active",
+            "is_active": True,
+            "inventory_types": inventory_type,
+        })
+        if share:
+            shared_orgs.append(other_id)
+
+    return [org_id] + shared_orgs
+

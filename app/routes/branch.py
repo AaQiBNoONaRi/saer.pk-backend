@@ -51,6 +51,22 @@ async def get_branches(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all branches, optionally filtered by organization"""
+    org_id_caller = current_user.get("organization_id")
+    role = current_user.get("role")
+    permissions = current_user.get("permissions", [])
+    
+    # Allow admins, super_admins, or users with entities.branch.view to see all branches
+    has_view_permission = (
+        role in ("admin", "super_admin") or
+        "entities.branch.view" in permissions or
+        "entities.branch.all" in permissions
+    )
+    
+    if not has_view_permission:
+        if not org_id_caller:
+            raise HTTPException(status_code=403, detail="Organization context missing")
+        organization_id = org_id_caller
+        
     filter_query = {"organization_id": organization_id} if organization_id else {}
     branches = await db_ops.get_all(Collections.BRANCHES, filter_query, skip=skip, limit=limit)
     
@@ -77,7 +93,9 @@ async def get_branch(
 ):
     """Get branch by ID"""
     branch = await db_ops.get_by_id(Collections.BRANCHES, branch_id)
-    if not branch:
+    org_id_caller = current_user.get("organization_id")
+    role = current_user.get("role")
+    if not branch or (org_id_caller and branch.get("organization_id") != org_id_caller and role not in ("admin", "super_admin")):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Branch not found"

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, get_org_id
 
 router = APIRouter(prefix="/customers", tags=["Customer Management"])
 
@@ -42,17 +42,15 @@ class WalkInCustomerUpdate(BaseModel):
 
 @router.get("/", summary="Get walk-in customers")
 async def get_customers(
-    organization_id: Optional[str] = Query(None),
     branch_id: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500)
+    limit: int = Query(100, ge=1, le=500),
+    org_id: str = Depends(get_org_id),
 ):
-    """Return manually added walk-in customers"""
-    filters = {}
-    if organization_id:
-        filters["organization_id"] = organization_id
+    """Return manually added walk-in customers – scoped to caller's org"""
+    filters: dict = {"organization_id": org_id}
     if branch_id:
         filters["branch_id"] = branch_id
     if is_active is not None:
@@ -73,10 +71,11 @@ async def get_customers(
 @router.post("/", summary="Add walk-in customer", status_code=status.HTTP_201_CREATED)
 async def create_customer(
     customer: WalkInCustomerCreate,
-    current_user: dict = Depends(get_current_user)
+    org_id: str = Depends(get_org_id),
 ):
-    """Add a new walk-in customer manually"""
+    """Add a new walk-in customer – stamped with caller's org"""
     customer_dict = customer.model_dump()
+    customer_dict["organization_id"] = org_id
     customer_dict["customer_type"] = "walk-in"
     customer_dict["created_at"] = datetime.utcnow().isoformat()
     customer_dict["updated_at"] = datetime.utcnow().isoformat()
@@ -88,9 +87,9 @@ async def create_customer(
 
 
 @router.get("/{customer_id}", summary="Get single customer")
-async def get_customer(customer_id: str):
+async def get_customer(customer_id: str, org_id: str = Depends(get_org_id)):
     customer = await db_ops.get_by_id(Collections.CUSTOMERS, customer_id)
-    if not customer:
+    if not customer or customer.get("organization_id") != org_id:
         raise HTTPException(status_code=404, detail="Customer not found")
     return serialize_doc(customer)
 
@@ -99,10 +98,10 @@ async def get_customer(customer_id: str):
 async def update_customer(
     customer_id: str,
     updates: WalkInCustomerUpdate,
-    current_user: dict = Depends(get_current_user)
+    org_id: str = Depends(get_org_id),
 ):
     customer = await db_ops.get_by_id(Collections.CUSTOMERS, customer_id)
-    if not customer:
+    if not customer or customer.get("organization_id") != org_id:
         raise HTTPException(status_code=404, detail="Customer not found")
 
     update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
@@ -113,9 +112,9 @@ async def update_customer(
 
 
 @router.delete("/{customer_id}", summary="Delete customer")
-async def delete_customer(customer_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_customer(customer_id: str, org_id: str = Depends(get_org_id)):
     customer = await db_ops.get_by_id(Collections.CUSTOMERS, customer_id)
-    if not customer:
+    if not customer or customer.get("organization_id") != org_id:
         raise HTTPException(status_code=404, detail="Customer not found")
     await db_ops.delete(Collections.CUSTOMERS, customer_id)
     return {"message": "Customer deleted"}
@@ -125,9 +124,9 @@ async def delete_customer(customer_id: str, current_user: dict = Depends(get_cur
 
 @router.get("/database/aggregate", summary="Aggregated customer database from all sources")
 async def get_customer_database(
-    organization_id: Optional[str] = Query(None),
     source: Optional[str] = Query(None),   # bookings | leads | walk-in | branches
-    search: Optional[str] = Query(None)
+    search: Optional[str] = Query(None),
+    org_id: str = Depends(get_org_id),
 ):
     """
     Aggregate customers from all sources:
@@ -143,9 +142,7 @@ async def get_customer_database(
 
     # ── 1. From ticket bookings ───────────────────────────────────────
     if not source or source == "bookings":
-        filters = {}
-        if organization_id:
-            filters["organization_id"] = organization_id
+        filters: dict = {"organization_id": org_id}
 
         ticket_bookings = await db_ops.get_all(Collections.TICKET_BOOKINGS, filters, limit=500)
         for booking in ticket_bookings:
@@ -250,9 +247,7 @@ async def get_customer_database(
 
     # ── 4. From leads ─────────────────────────────────────────────────
     if not source or source == "leads":
-        leads_filters = {}
-        if organization_id:
-            leads_filters["organization_id"] = organization_id
+        leads_filters: dict = {"organization_id": org_id}
         leads = await db_ops.get_all(Collections.LEADS, leads_filters, limit=500)
         for lead in leads:
             phone = lead.get("contact_number") or ""
@@ -282,9 +277,7 @@ async def get_customer_database(
 
     # ── 5. Walk-in customers ──────────────────────────────────────────
     if not source or source == "walk-in":
-        walkin_filters = {}
-        if organization_id:
-            walkin_filters["organization_id"] = organization_id
+        walkin_filters: dict = {"organization_id": org_id}
         walk_ins = await db_ops.get_all(Collections.CUSTOMERS, walkin_filters, limit=500)
         for c in walk_ins:
             phone = c.get("phone") or ""
@@ -332,8 +325,7 @@ async def get_customer_database(
 # ─── Sync endpoint (manually trigger aggregation and save) ───────────────────
 @router.post("/database/sync", summary="Sync customer database from all sources")
 async def sync_customer_database(
-    organization_id: Optional[str] = Query(None),
-    current_user: dict = Depends(get_current_user)
+    org_id: str = Depends(get_org_id),
 ):
     """
     Sync aggregated customers into the customer_database collection for faster querying.

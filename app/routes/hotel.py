@@ -46,7 +46,9 @@ async def get_hotels(
     is_super_admin = current_user.get('role') == 'super_admin'
     
     if org_id:
-        filter_query["organization_id"] = org_id
+        from app.utils.auth import get_shared_org_ids
+        visible_orgs = await get_shared_org_ids(org_id, "hotels")
+        filter_query["organization_id"] = {"$in": visible_orgs}
     elif not is_super_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")
 
@@ -125,7 +127,9 @@ async def get_hotel(
     is_super_admin = current_user.get('role') == 'super_admin'
     
     if org_id:
-        if hotel.get('organization_id') != org_id:
+        from app.utils.auth import get_shared_org_ids
+        visible_orgs = await get_shared_org_ids(org_id, "hotels")
+        if hotel.get('organization_id') not in visible_orgs:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     elif not is_super_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")

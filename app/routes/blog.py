@@ -11,7 +11,7 @@ from app.models.blog import BlogCreate, BlogUpdate, BlogResponse
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, get_org_id
 
 router = APIRouter(prefix="/blogs", tags=["Blogs"])
 
@@ -26,11 +26,11 @@ def generate_slug(title: str) -> str:
 @router.post("/", response_model=BlogResponse, status_code=status.HTTP_201_CREATED)
 async def create_blog(
     blog: BlogCreate,
-    current_user: dict = Depends(get_current_user)
+    org_id: str = Depends(get_org_id),
 ):
-    """Create a new blog"""
+    """Create a new blog – stamped with caller's org"""
     blog_dict = blog.model_dump()
-    
+    blog_dict["organization_id"] = org_id
     # Generate preview UUID for draft mode
     blog_dict['previewUuid'] = str(uuid.uuid4())
     blog_dict['status'] = 'draft'  # Always start as draft
@@ -44,11 +44,11 @@ async def create_blog(
 async def get_blogs(
     skip: int = 0,
     limit: int = 20,
-    status: str = None,  # Filter by status
-    current_user: dict = Depends(get_current_user)
+    status: str = None,
+    org_id: str = Depends(get_org_id),
 ):
-    """Get all blogs with optional status filter"""
-    filter_query = {}
+    """Get blogs scoped to caller's org"""
+    filter_query: dict = {"organization_id": org_id}
     if status:
         filter_query['status'] = status
     

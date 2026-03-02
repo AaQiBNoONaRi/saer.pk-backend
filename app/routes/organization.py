@@ -6,9 +6,10 @@ from typing import List
 import bcrypt
 from app.models.organization import OrganizationCreate, OrganizationUpdate, OrganizationResponse
 from app.database.db_operations import db_ops
-from app.config.database import Collections
+from app.config.database import Collections, db_config
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user, require_org_admin
+from bson import ObjectId
 
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
 
@@ -45,6 +46,18 @@ async def create_organization(
     created_org = await db_ops.create(Collections.ORGANIZATIONS, org_dict)
     return serialize_doc(created_org)
 
+@router.get("/directory", response_model=List[dict])
+async def get_organization_directory(
+    current_user: dict = Depends(get_current_user)
+):
+    """Get a safe directory of organizations for linking/sharing (basic info only)"""
+    cursor = db_config.get_collection(Collections.ORGANIZATIONS).find(
+        {"is_active": True},
+        {"_id": 1, "name": 1, "full_name": 1, "username": 1}
+    )
+    orgs = await cursor.to_list(length=1000)
+    return serialize_docs(orgs)
+
 @router.get("/", response_model=List[OrganizationResponse])
 async def get_organizations(
     skip: int = 0,
@@ -52,7 +65,30 @@ async def get_organizations(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all organizations"""
-    organizations = await db_ops.get_all(Collections.ORGANIZATIONS, skip=skip, limit=limit)
+    org_id_caller = current_user.get("organization_id")
+    role = current_user.get("role")
+    permissions = current_user.get("permissions", [])
+    
+    filter_query = {}
+    
+    # Allow admins, super_admins, or users with entities.organization.view to see all organizations
+    has_view_permission = (
+        role in ("admin", "super_admin") or
+        "entities.organization.view" in permissions or
+        "entities.organization.all" in permissions
+    )
+    
+    if not has_view_permission:
+        if not org_id_caller:
+            raise HTTPException(status_code=403, detail="Organization context missing")
+        # Convert to ObjectId if it's a 24-char hex string, otherwise keep as-is
+        try:
+            filter_query["_id"] = ObjectId(org_id_caller) if len(org_id_caller) == 24 else org_id_caller
+        except Exception:
+            # If ObjectId conversion fails, try as string
+            filter_query["_id"] = org_id_caller
+        
+    organizations = await db_ops.get_all(Collections.ORGANIZATIONS, filter_query, skip=skip, limit=limit)
     return serialize_docs(organizations)
 
 @router.get("/{org_id}", response_model=OrganizationResponse)
@@ -62,7 +98,9 @@ async def get_organization(
 ):
     """Get organization by ID"""
     organization = await db_ops.get_by_id(Collections.ORGANIZATIONS, org_id)
-    if not organization:
+    org_id_caller = current_user.get("organization_id")
+    role = current_user.get("role")
+    if not organization or (org_id_caller and str(organization.get("_id", organization.get("id", ""))) != org_id_caller and role not in ("admin", "super_admin")):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Organization not found"

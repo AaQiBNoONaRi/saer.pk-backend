@@ -348,19 +348,38 @@ async def create_manual_entry(data: Dict, created_by: str) -> Dict:
     if not dr_doc or not cr_doc:
         raise ValueError("Could not resolve debit or credit account. Please seed your Chart of Accounts first.")
 
+    # ── Build journal lines ───────────────────────────────────────────────────
+    # Convention for outflow entries (expense / salary / vendor_bill):
+    #   DEBIT  → the expense / payable account  (cost goes UP)
+    #   CREDIT → the cash / bank account        (money goes OUT)
+    #
+    # The frontend passes:
+    #   debit_account_id  = the "Pay From" cash/bank account  ← this is actually the CREDIT side
+    #   credit_account_id = the expense / payable account     ← this is actually the DEBIT side
+    #
+    # So for outflow entry types we SWAP the roles.
+    OUTFLOW_TYPES = {ManualEntryType.EXPENSE, ManualEntryType.SALARY, ManualEntryType.VENDOR_BILL}
+    if entry_type in OUTFLOW_TYPES:
+        # expense/payable = debit side, cash/bank = credit side
+        debit_doc  = cr_doc   # expense or payable account
+        credit_doc = dr_doc   # cash / bank account
+    else:
+        debit_doc  = dr_doc
+        credit_doc = cr_doc
+
     entries = [
         {
-            "account_id":   dr_doc["_id"],
-            "account_code": dr_doc.get("code"),
-            "account_name": dr_doc.get("name"),
+            "account_id":   debit_doc["_id"],
+            "account_code": debit_doc.get("code"),
+            "account_name": debit_doc.get("name"),
             "debit":        amount,
             "credit":       0.0,
             "description":  description,
         },
         {
-            "account_id":   cr_doc["_id"],
-            "account_code": cr_doc.get("code"),
-            "account_name": cr_doc.get("name"),
+            "account_id":   credit_doc["_id"],
+            "account_code": credit_doc.get("code"),
+            "account_name": credit_doc.get("name"),
             "debit":        0.0,
             "credit":       amount,
             "description":  description,
@@ -443,7 +462,12 @@ async def get_audit_trail(
     query: Dict[str, Any] = {}
     if action:
         query["action"] = action
-    # Audit trail doesn't have org_id but reference_id can be org scoped via join –
-    # keep it simple and return unfiltered for now (UI filters client side)
+    
+    if organization_id:
+        query["$or"] = [
+            {"organization_id": organization_id},
+            {"new_data.organization_id": organization_id},
+            {"old_data.organization_id": organization_id}
+        ]
     cursor = coll.find(query).sort("timestamp", -1).skip(skip).limit(limit)
     return serialize_docs(await cursor.to_list(length=limit))

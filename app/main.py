@@ -54,6 +54,9 @@ from app.routes import (
     flight_search,
     # HR Management
     hr,
+    # Org Linking & Inventory Sharing
+    org_links,
+    inventory_shares,
 )
 from app.finance import routes as finance_routes
 from app.routes import debug
@@ -188,6 +191,10 @@ app.include_router(debug.router, prefix="/api")
 
 # HR Management
 app.include_router(hr.router, prefix="/api")
+
+# Org Linking & Inventory Shares
+app.include_router(org_links.router, prefix="/api")
+app.include_router(inventory_shares.router, prefix="/api")
 
 # Finance & Accounting Module
 app.include_router(finance_routes.router, prefix="/api")

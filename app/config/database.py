@@ -93,6 +93,10 @@ class Collections:
     COMMISSIONS = "commissions"
     DISCOUNTS = "discounts"
     DISCOUNTED_HOTELS = "discounted_hotels"
+    # Org linking and inventory sharing
+    ORG_LINKS = "org_links"
+    INVENTORY_SHARES = "inventory_shares"
+    LEADS = "leads"
     
     # Content Management Collections
     BLOGS = "blogs"

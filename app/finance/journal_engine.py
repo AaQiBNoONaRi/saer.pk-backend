@@ -57,11 +57,17 @@ async def write_audit(
     new_data: Optional[Dict],
     performed_by: str,
 ):
-    coll = db_config.get_collection(Collections.AUDIT_TRAIL)
+    org_id = None
+    if new_data and new_data.get("organization_id"):
+        org_id = new_data.get("organization_id")
+    elif old_data and old_data.get("organization_id"):
+        org_id = old_data.get("organization_id")
+
     await coll.insert_one({
         "action": action,
         "collection": collection,
         "reference_id": reference_id,
+        "organization_id": org_id,
         "old_data": old_data or {},
         "new_data": new_data or {},
         "performed_by": performed_by,
