@@ -16,9 +16,12 @@ from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
 
 import os, shutil
+from fastapi import Form
 
 PASSPORT_UPLOAD_DIR = os.path.join("uploads", "passports")
+SLIP_UPLOAD_DIR = os.path.join("uploads", "payment_slips")
 os.makedirs(PASSPORT_UPLOAD_DIR, exist_ok=True)
+os.makedirs(SLIP_UPLOAD_DIR, exist_ok=True)
 
 router = APIRouter(prefix="/customer-bookings", tags=["Customer Bookings"])
 
@@ -153,6 +156,54 @@ async def track_customer_booking(booking_id: str):
     if not booking:
         raise HTTPException(status_code=404, detail="Booking not found")
     return serialize_doc(booking)
+
+
+# ─── Public: Submit payment for a customer booking ───────────────────────────
+
+@router.post("/{booking_id}/submit-payment")
+async def submit_customer_payment(
+    booking_id: str,
+    payment_method:  str = Form(...),
+    depositor_name:  str = Form(""),
+    account_number:  str = Form(""),
+    bank_name:       str = Form(""),
+    account_title:   str = Form(""),
+    slip_file: UploadFile = File(None),
+):
+    """Public: customer submits payment details + slip after booking."""
+    booking = await db_ops.get_by_id(Collections.CUSTOMER_BOOKINGS, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    # Upload slip if provided
+    slip_path = ""
+    if slip_file and slip_file.filename:
+        allowed = {"image/jpeg", "image/png", "image/jpg", "image/webp",
+                   "application/pdf"}
+        if slip_file.content_type not in allowed:
+            raise HTTPException(status_code=400, detail="Only images or PDF allowed for slip")
+        ext = os.path.splitext(slip_file.filename or "slip.jpg")[1] or ".jpg"
+        fname = f"slip_{booking_id}_{datetime.now().strftime('%Y%m%d%H%M%S%f')}{ext}"
+        dest = os.path.join(SLIP_UPLOAD_DIR, fname)
+        with open(dest, "wb") as buf:
+            shutil.copyfileobj(slip_file.file, buf)
+        slip_path = f"/uploads/payment_slips/{fname}"
+
+    update = {
+        "payment_method":  payment_method,
+        "payment_status":  "pending_verification",
+        "payment_details": {
+            "depositor_name": depositor_name,
+            "account_number": account_number,
+            "bank_name":      bank_name,
+            "account_title":  account_title,
+            "slip_path":      slip_path,
+        },
+        "updated_at": datetime.utcnow().isoformat(),
+    }
+
+    updated = await db_ops.update(Collections.CUSTOMER_BOOKINGS, booking_id, update)
+    return serialize_doc(updated)
 
 
 # ─── Authenticated: list all customer bookings (org staff) ───────────────────
