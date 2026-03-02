@@ -81,7 +81,8 @@ async def agency_login(credentials: AgencyLogin):
             "agency_id": str(agency["_id"]),
             "branch_id": agency.get("branch_id"),
             "organization_id": agency.get("organization_id"),
-            "agency_name": agency.get("name")
+            "agency_name": agency.get("name"),
+            "agency_type": agency.get("agency_type", "full")
         }
         access_token = create_access_token(data=token_data)
         

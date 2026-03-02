@@ -798,6 +798,7 @@ async def create_payment(
     transfer_account_name: Optional[str] = Form(None),
     transfer_phone: Optional[str] = Form(None),
     transfer_cnic: Optional[str] = Form(None),
+    transfer_account_number: Optional[str] = Form(None),
     slip_file: Optional[UploadFile] = File(None),
     current_user: dict = Depends(get_current_user)
 ):
@@ -833,6 +834,7 @@ async def create_payment(
         "transfer_account_name": transfer_account_name,
         "transfer_phone": transfer_phone,
         "transfer_cnic": transfer_cnic,
+        "transfer_account_number": transfer_account_number,
     }
     
     # Resolve IDs from JWT
@@ -896,8 +898,8 @@ async def create_payment(
         # Update booking status directly — no payment record stored
         if col_name:
             await db_ops.update(col_name, booking_id, {
-                "payment_method": payment_method,
-                "payment_status": "paid",
+                "payment_details.payment_method": payment_method,
+                "payment_details.payment_status": "paid",
                 "booking_status": "confirmed",
                 "paid_amount": amount_to_pay
             })
@@ -921,12 +923,21 @@ async def create_payment(
     # Allow manual deposits even if no booking ID exists natively.
     created_payment = await db_ops.create(Collections.PAYMENTS, payment_dict)
     
-    # For non-credit: update booking with pending status
+    # For non-credit: update booking with pending status and transfer details inside payment_details
     if col_name:
-        await db_ops.update(col_name, booking_id, {
-            "payment_method": payment_method,
-            "payment_status": "pending"
-        })
+        b_update = {
+            "payment_details.payment_method": payment_method,
+            "payment_details.payment_status": "pending"
+        }
+        if payment_method == "transfer":
+            b_update.update({
+                "payment_details.transfer_account": transfer_account,
+                "payment_details.transfer_account_name": transfer_account_name,
+                "payment_details.transfer_phone": transfer_phone,
+                "payment_details.transfer_cnic": transfer_cnic,
+                "payment_details.transfer_account_number": transfer_account_number
+            })
+        await db_ops.update(col_name, booking_id, b_update)
         
     return serialize_doc(created_payment)
 
@@ -1035,7 +1046,7 @@ async def update_payment_status(
                 payment_status = "paid" if new_paid_amount >= total_amount else "partial"
                 
                 await db_ops.update(col_name, payment.get('booking_id'), {
-                    "payment_status": payment_status,
+                    "payment_details.payment_status": payment_status,
                     "paid_amount": new_paid_amount,
                     "booking_status": "confirmed" if payment_status == "paid" else "underprocess"
                 })

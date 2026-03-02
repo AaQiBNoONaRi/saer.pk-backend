@@ -3,6 +3,10 @@ Helper utility functions
 """
 from bson import ObjectId
 from typing import Any, Dict, List
+from datetime import datetime
+import pytz
+
+PKT = pytz.timezone('Asia/Karachi')
 
 def serialize_doc(doc: Dict) -> Dict:
     """Convert MongoDB document to JSON-serializable format"""
@@ -12,10 +16,30 @@ def serialize_doc(doc: Dict) -> Dict:
     if "_id" in doc and isinstance(doc["_id"], ObjectId):
         doc["_id"] = str(doc["_id"])
     
-    # Convert any nested ObjectIds
+    # Convert any nested ObjectIds or datetimes
     for key, value in doc.items():
         if isinstance(value, ObjectId):
             doc[key] = str(value)
+        elif isinstance(value, datetime):
+            if value.tzinfo is None:
+                utc_dt = pytz.utc.localize(value)
+                doc[key] = utc_dt.astimezone(PKT).isoformat()
+            else:
+                doc[key] = value.astimezone(PKT).isoformat()
+        elif isinstance(value, str) and key in ("check_in", "check_out", "start_time", "end_time", "created_at", "updated_at"):
+            # Attempt to parse ISO strings that might be naive UTC from DB
+            try:
+                # If it already has an offset, we leave it alone or just parse it
+                if '+' in value or value.endswith('Z'):
+                    dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                    doc[key] = dt.astimezone(PKT).isoformat()
+                else:
+                    # Naive string from DB is assumed UTC
+                    dt = datetime.fromisoformat(value)
+                    utc_dt = pytz.utc.localize(dt)
+                    doc[key] = utc_dt.astimezone(PKT).isoformat()
+            except ValueError:
+                pass  # Not a valid isoformat string, leave as is
         elif isinstance(value, list):
             doc[key] = [serialize_doc(item) if isinstance(item, dict) else item for item in value]
         elif isinstance(value, dict):

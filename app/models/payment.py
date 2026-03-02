@@ -148,6 +148,7 @@ class PaymentBase(BaseModel):
     transfer_account_name: Optional[str] = Field(None, description="Account name for transfer")
     transfer_phone: Optional[str] = Field(None, description="Phone number for transfer")
     transfer_cnic: Optional[str] = Field(None, description="CNIC for transfer")
+    transfer_account_number: Optional[str] = Field(None, description="Client's account number for transfer")
 
 class PaymentCreate(PaymentBase):
     pass

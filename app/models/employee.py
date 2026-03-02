@@ -13,7 +13,7 @@ class EmployeeBase(BaseModel):
     entity_id: str = Field(..., description="ID of the organization, branch, or agency")
     name: str = Field(..., min_length=1, max_length=200)
     email: EmailStr
-    phone: str = Field(..., min_length=10, max_length=20)
+    phone: str = Field(..., max_length=20)
     role: str = Field(..., description="admin, manager, agent, etc.")
     is_active: bool = True
     portal_access_enabled: bool = True
@@ -27,7 +27,7 @@ class EmployeeCreate(EmployeeBase):
 class EmployeeUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     email: Optional[EmailStr] = None
-    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    phone: Optional[str] = Field(None, max_length=20)
     role: Optional[str] = None
     is_active: Optional[bool] = None
     portal_access_enabled: Optional[bool] = None

@@ -27,15 +27,15 @@ async def get_commissions(
     skip: int = 0,
     limit: int = 100,
     status_filter: Optional[str] = Query(None, alias="status"),
-    partner_type: Optional[str] = None,
-    org_id: str = Depends(get_org_id),
+    applied_to: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
 ):
     """Get commissions scoped to caller's org"""
     filter_query: dict = {"organization_id": org_id}
     if status_filter:
-        filter_query["status"] = status_filter
-    if partner_type:
-        filter_query["partner_type"] = partner_type
+        filter_query["is_active"] = (status_filter.lower() == "active")
+    if applied_to:
+        filter_query["applied_to"] = applied_to
     
     commissions = await db_ops.get_all(Collections.COMMISSIONS, filter_query=filter_query, skip=skip, limit=limit)
     return serialize_docs(commissions)

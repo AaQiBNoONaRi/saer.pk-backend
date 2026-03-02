@@ -8,6 +8,7 @@ from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user, get_org_id, get_shared_org_ids
+from app.services.service_charge_logic import get_branch_service_charge, apply_ticket_charge
 
 router = APIRouter(prefix="/flights", tags=["Inventory: Flights"])
 
@@ -71,14 +72,17 @@ async def get_flights(
             
     flights = await db_ops.get_all(Collections.FLIGHTS, filter_query, skip=skip, limit=limit)
     
-    # Post-process to flag shared items
-    for f in flights:
-        if f.get("organization_id") != org_id:
-            f["is_shared"] = True
-            f["shared_from_org_id"] = f.get("organization_id")
-        else:
-            f["is_shared"] = False
-            
+    # Apply service charges for branch users
+    branch_id = current_user.get("branch_id") or (current_user.get("entity_id") if current_user.get("entity_type") == "branch" else None)
+    
+    if branch_id:
+        rule = await get_branch_service_charge(branch_id)
+        if rule:
+            for flight in flights:
+                flight["adult_selling"] = apply_ticket_charge(flight.get("adult_selling", 0), rule)
+                flight["child_selling"] = apply_ticket_charge(flight.get("child_selling", 0), rule)
+                flight["infant_selling"] = apply_ticket_charge(flight.get("infant_selling", 0), rule)
+
     return serialize_docs(flights)
 
 @router.get("/{flight_id}", response_model=FlightResponse)
@@ -94,20 +98,16 @@ async def get_flight(
     if not flight:
         raise HTTPException(status_code=404, detail="Flight not found")
         
-    flight_org = flight.get("organization_id")
-    if org_id and flight_org != org_id and not is_super:
-        # Check if it's a shared ticket
-        shared_orgs = await get_shared_org_ids(org_id, "tickets")
-        if flight_org not in shared_orgs or not flight.get("allow_reselling"):
-            raise HTTPException(status_code=404, detail="Flight not found")
-            
-    # Post-process to flag shared items
-    if flight_org != org_id:
-        flight["is_shared"] = True
-        flight["shared_from_org_id"] = flight_org
-    else:
-        flight["is_shared"] = False
-        
+    # Apply service charges for branch users
+    branch_id = current_user.get("branch_id") or (current_user.get("entity_id") if current_user.get("entity_type") == "branch" else None)
+    
+    if branch_id:
+        rule = await get_branch_service_charge(branch_id)
+        if rule:
+            flight["adult_selling"] = apply_ticket_charge(flight.get("adult_selling", 0), rule)
+            flight["child_selling"] = apply_ticket_charge(flight.get("child_selling", 0), rule)
+            flight["infant_selling"] = apply_ticket_charge(flight.get("infant_selling", 0), rule)
+
     return serialize_doc(flight)
 
 @router.put("/{flight_id}", response_model=FlightResponse)
