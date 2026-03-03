@@ -3,6 +3,7 @@ Main FastAPI application
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
 import asyncio
 from app.config.database import db_config
@@ -242,14 +243,73 @@ app.include_router(employee_permissions.router, prefix="/api")
 
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
     """Root endpoint"""
-    return {
-        "app": settings.APP_NAME,
-        "version": settings.VERSION,
-        "status": "running"
-    }
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{settings.APP_NAME} - Running</title>
+        <style>
+            body {{
+                font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+                color: #0f172a;
+                margin: 0;
+            }}
+            .card {{
+                background: white;
+                padding: 3rem;
+                border-radius: 24px;
+                box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+                text-align: center;
+                max-width: 400px;
+                width: 90%;
+            }}
+            .icon {{
+                font-size: 3rem;
+                margin-bottom: 1rem;
+            }}
+            h1 {{
+                margin: 0 0 0.5rem 0;
+                font-size: 1.875rem;
+                color: #166534;
+            }}
+            p {{
+                margin: 0 0 1.5rem 0;
+                color: #475569;
+                font-size: 1.125rem;
+            }}
+            .badge {{
+                display: inline-block;
+                padding: 0.5rem 1rem;
+                background: #f1f5f9;
+                color: #334155;
+                border-radius: 9999px;
+                font-weight: 600;
+                font-size: 0.875rem;
+                border: 1px solid #e2e8f0;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="icon">🚀</div>
+            <h1>{settings.APP_NAME}</h1>
+            <p>API Backend is successfully running and accepting connections.</p>
+            <div class="badge">Version {settings.VERSION}</div>
+        </div>
+    </body>
+    </html>
+    """
 
 @app.get("/health")
 async def health_check():
