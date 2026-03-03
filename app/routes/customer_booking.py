@@ -203,6 +203,32 @@ async def submit_customer_payment(
     }
 
     updated = await db_ops.update(Collections.CUSTOMER_BOOKINGS, booking_id, update)
+
+    # ── Also save to payments collection so ORG can approve ──────────────
+    booking_data = serialize_doc(booking)
+    payment_record = {
+        "source":              "customer_booking",
+        "booking_id":         booking_id,
+        "booking_reference":  booking_data.get("booking_reference", ""),
+        "contact_name":       booking_data.get("contact_name", ""),
+        "contact_phone":      booking_data.get("contact_phone", ""),
+        "amount":             booking_data.get("total_amount", 0),
+        "payment_method":     payment_method,
+        "payment_status":     "pending_verification",
+        "payment_details": {
+            "depositor_name": depositor_name,
+            "account_number": account_number,
+            "bank_name":      bank_name,
+            "account_title":  account_title,
+            "slip_path":      slip_path,
+        },
+        "slip_path":   slip_path,
+        "approved":    False,
+        "created_at":  datetime.utcnow().isoformat(),
+        "updated_at":  datetime.utcnow().isoformat(),
+    }
+    await db_ops.create(Collections.PAYMENTS, payment_record)
+
     return serialize_doc(updated)
 
 
