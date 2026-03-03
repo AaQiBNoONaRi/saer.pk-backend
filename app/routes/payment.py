@@ -162,6 +162,9 @@ async def list_vouchers(
     List all vouchers for the current organization
     Also checks and updates expired vouchers
     """
+    org_id = current_user.get("organization_id")
+    if not org_id and current_user.get("role") not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Organization context missing")
     try:
         db = db_config.database
         
@@ -836,9 +839,13 @@ async def create_payment(
     
     # Resolve IDs from JWT
     role = current_user.get('role')
+    org_id = current_user.get('organization_id')
+    if not org_id and role not in ('admin', 'super_admin'):
+        raise HTTPException(status_code=403, detail="Organization context missing")
+        
     payment_dict['agency_id'] = current_user.get('agency_id') or (current_user.get('sub') if role == 'agency' else None)
     payment_dict['branch_id'] = current_user.get('branch_id') or (current_user.get('sub') if role == 'branch' else None)
-    payment_dict['organization_id'] = current_user.get('organization_id')
+    payment_dict['organization_id'] = org_id
     payment_dict['sender_role'] = role
     payment_dict['agent_name'] = (
         current_user.get('agency_name') or
@@ -955,8 +962,16 @@ async def get_payments(
     """Get payments with optional filtering."""
     query = {}
     
-    # If Agency or Branch, only see their own
+    org_id = current_user.get("organization_id")
     role = current_user.get('role')
+
+    if org_id:
+        query['organization_id'] = str(org_id)
+    else:
+        if role not in ('admin', 'super_admin'):
+            raise HTTPException(status_code=403, detail="Organization context missing")
+
+    # If Agency or Branch, only see their own
     if role == 'agency':
         query['agency_id'] = current_user.get('agency_id') or current_user.get('sub')
     elif role == 'branch':

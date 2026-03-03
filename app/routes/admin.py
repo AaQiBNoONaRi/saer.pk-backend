@@ -13,60 +13,106 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/admin/login")
 @router.post("/login", response_model=AdminLoginResponse)
 async def admin_login(credentials: AdminLogin):
     """
-    Authenticate admin user and return JWT token
+    Authenticate admin OR organisation user and return JWT token.
+    Lookup order:
+      1. ADMINS collection  (super-admin / org-admin accounts)
+      2. ORGANIZATIONS collection (org portal users with portal_access_enabled)
     """
-    # Find admin by username
-    admin = await db_ops.get_one(Collections.ADMINS, {"username": credentials.username})
-    
-    if not admin:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
-        )
-    
-    # Verify password
-    if not verify_password(credentials.password, admin["password"]):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
-        )
-    
-    # Check if admin is active
-    if not admin.get("is_active", True):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is deactivated"
-        )
-    
-    # Create access token
-    token_data = {
-        "sub": str(admin["_id"]),
-        "username": admin["username"],
-        "full_name": admin.get("full_name") or admin.get("name", ""),
-        "name": admin.get("name") or admin.get("full_name", ""),
-        "role": admin.get("role", "admin"),
-        "organization_id": admin.get("organization_id"),
-        "user_type": "admin"
-    }
-    access_token = create_access_token(data=token_data)
-    
-    # Prepare admin response
-    admin_response = AdminResponse(
-        _id=str(admin["_id"]),
-        username=admin["username"],
-        email=admin["email"],
-        full_name=admin["full_name"],
-        organization_id=admin["organization_id"],
-        role=admin.get("role", "admin"),
-        is_active=admin.get("is_active", True),
-        created_at=admin.get("created_at", datetime.utcnow()),
-        updated_at=admin.get("updated_at", datetime.utcnow())
+    import bcrypt as _bcrypt
+
+    # ── 1. Check ADMINS collection (by username or email) ────────────────────
+    admin = await db_ops.get_one(
+        Collections.ADMINS,
+        {"$or": [{"username": credentials.username}, {"email": credentials.username}]}
     )
-    
-    return AdminLoginResponse(
-        access_token=access_token,
-        admin=admin_response
+
+    if admin:
+        if not verify_password(credentials.password, admin["password"]):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Invalid username or password")
+        if not admin.get("is_active", True):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Account is deactivated")
+
+        token_data = {
+            "sub":             str(admin["_id"]),
+            "username":        admin["username"],
+            "full_name":       admin.get("full_name") or admin.get("name", ""),
+            "name":            admin.get("name") or admin.get("full_name", ""),
+            "role":            admin.get("role", "admin"),
+            "organization_id": admin.get("organization_id"),
+            "user_type":       "admin",
+        }
+        access_token = create_access_token(data=token_data)
+        admin_response = AdminResponse(
+            _id=str(admin["_id"]),
+            username=admin["username"],
+            email=admin["email"],
+            full_name=admin["full_name"],
+            organization_id=admin["organization_id"],
+            role=admin.get("role", "admin"),
+            is_active=admin.get("is_active", True),
+            created_at=admin.get("created_at", datetime.utcnow()),
+            updated_at=admin.get("updated_at", datetime.utcnow()),
+        )
+        return AdminLoginResponse(access_token=access_token, admin=admin_response)
+
+    # ── 2. Fall back to ORGANIZATIONS collection ──────────────────────────────
+    org = await db_ops.get_one(
+        Collections.ORGANIZATIONS,
+        {"email": credentials.username, "portal_access_enabled": True}
     )
+
+    if org:
+        stored_pw = org.get("password", "")
+        # Org passwords are hashed with bcrypt directly (not via passlib)
+        try:
+            password_ok = _bcrypt.checkpw(
+                credentials.password.encode("utf-8"),
+                stored_pw.encode("utf-8") if isinstance(stored_pw, str) else stored_pw,
+            )
+        except Exception:
+            password_ok = False
+
+        if not password_ok:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Invalid username or password")
+
+        if org.get("status", "active").lower() != "active":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
+                                detail="Organisation account is inactive")
+
+        org_id = str(org["_id"])
+        token_data = {
+            "sub":             org_id,
+            "username":        org.get("email"),
+            "full_name":       org.get("name") or org.get("contact_person", ""),
+            "name":            org.get("name") or org.get("contact_person", ""),
+            "role":            "org_admin",
+            "organization_id": org_id,
+            "user_type":       "org_admin",
+        }
+        access_token = create_access_token(data=token_data)
+        # Build AdminResponse-compatible object for the org user
+        admin_response = AdminResponse(
+            _id=org_id,
+            username=org.get("email", ""),
+            email=org.get("email", ""),
+            full_name=org.get("name") or org.get("contact_person", ""),
+            organization_id=org_id,
+            role="org_admin",
+            is_active=org.get("status", "active").lower() == "active",
+            created_at=org.get("created_at", datetime.utcnow()),
+            updated_at=org.get("updated_at", datetime.utcnow()),
+        )
+        return AdminLoginResponse(access_token=access_token, admin=admin_response)
+
+    # ── Neither found ─────────────────────────────────────────────────────────
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid username or password",
+    )
+
 
 @router.get("/me", response_model=AdminResponse)
 async def get_current_admin(current_user: dict = Depends(get_current_user)):

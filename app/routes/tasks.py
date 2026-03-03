@@ -232,5 +232,3 @@ def _get_entity_name(current_user: dict) -> str:
     if entity_type == "agency":
         return current_user.get("agency_name") or "Agency"
     return current_user.get("role") or current_user.get("user_type") or ""
-
-

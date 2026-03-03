@@ -7,7 +7,6 @@ from app.utils.helpers import serialize_doc, serialize_docs
 from app.models.hotel import HotelCreate, HotelUpdate, HotelResponse
 from app.config.settings import settings
 from datetime import date, datetime
-from app.services.service_charge_logic import get_branch_service_charge, apply_hotel_charge
 import os
 import shutil
 import uuid
@@ -47,7 +46,9 @@ async def get_hotels(
     is_super_admin = current_user.get('role') == 'super_admin'
     
     if org_id:
-        filter_query["organization_id"] = org_id
+        from app.utils.auth import get_shared_org_ids
+        visible_orgs = await get_shared_org_ids(org_id, "hotels")
+        filter_query["organization_id"] = {"$in": visible_orgs}
     elif not is_super_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")
 
@@ -67,32 +68,12 @@ async def get_hotels(
 
     hotels = await db_ops.get_all(Collections.HOTELS, filter_query, skip=skip, limit=limit)
 
-    # ── Apply Service Charges for Branch Users ──
-    role = current_user.get('role')
-    entity_type = current_user.get('entity_type')
-    branch_id = current_user.get('branch_id') or (current_user.get('sub') if role == 'branch' else None)
-    
-    agency_type = current_user.get("agency_type")
-    is_portal_user = (role == "branch") or (role == "agency" and agency_type == "area") or (entity_type == "branch")
-    
-    rule = None
-    if is_portal_user and branch_id:
-        rule = await get_branch_service_charge(branch_id)
-
     results = []
     for hotel in hotels:
         if hotel.get("category_id"):
             category = await db_ops.get_by_id(Collections.HOTEL_CATEGORIES, hotel["category_id"])
             if category:
                 hotel["category_name"] = category.get("name")
-        
-        # Apply SC to all prices in the hotel
-        if rule and 'prices' in hotel and hotel['prices']:
-            for price_entry in hotel['prices']:
-                for room_type in ['sharing', 'quint', 'quad', 'triple', 'double']:
-                    if room_type in price_entry:
-                        price_entry[room_type] = apply_hotel_charge(price_entry[room_type], rule)
-
         results.append(hotel)
 
     return serialize_docs(results)
@@ -146,7 +127,9 @@ async def get_hotel(
     is_super_admin = current_user.get('role') == 'super_admin'
     
     if org_id:
-        if hotel.get('organization_id') != org_id:
+        from app.utils.auth import get_shared_org_ids
+        visible_orgs = await get_shared_org_ids(org_id, "hotels")
+        if hotel.get('organization_id') not in visible_orgs:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     elif not is_super_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Organization context missing")

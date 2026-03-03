@@ -132,12 +132,29 @@ PERMISSION_CATALOGUE = [
         "icon": "🧑‍💼",
         "description": "Human resources management",
         "subcategories": [
+            {"label": "Dashboard", "permissions": [
+                {"code": "hr.dashboard.view", "label": "View HR Dashboard"}
+            ]},
             {"label": "Employees", "permissions": build_module_permissions("hr.employees", "HR Employees")},
-            {"label": "Attendance", "permissions": build_module_permissions("hr.attendance", "Attendance")},
-            {"label": "Movements", "permissions": build_module_permissions("hr.movements", "Movements")},
-            {"label": "Commissions", "permissions": build_module_permissions("hr.commissions", "HR Commissions")},
-            {"label": "Punctuality", "permissions": build_module_permissions("hr.punctuality", "Punctuality")},
-            {"label": "Approvals", "permissions": build_module_permissions("hr.approvals", "Approvals")},
+            {"label": "Attendance", "permissions": [
+                {"code": "hr.attendance.view", "label": "View Attendance"},
+            ]},
+            {"label": "Movements", "permissions": [
+                {"code": "hr.movements.view", "label": "View Movements"},
+                {"code": "hr.movements.add", "label": "Add Movements"},
+            ]},
+            {"label": "Commissions", "permissions": [
+                {"code": "hr.commissions.view", "label": "View Commissions"},
+            ]},
+            {"label": "Punctuality", "permissions": [
+                {"code": "hr.punctuality.view", "label": "View Punctuality"},
+            ]},
+            {"label": "Approvals", "permissions": [
+                {"code": "hr.approvals.view", "label": "View Approvals"},
+            ]},
+            {"label": "Payments", "permissions": [
+                {"code": "hr.payments.view", "label": "View HR Payments"},
+            ]},
         ],
     },
     

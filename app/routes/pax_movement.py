@@ -140,14 +140,19 @@ async def get_pax_movement_stats(current_user: dict = Depends(get_current_user))
         
         # Build query based on user role
         query = {"booking_status": "approved"}
-        
-        # Filter by agency if user is an agency
+
+        # Always scope to caller's organization
+        org_id = (current_user.get("organization_id") or "").strip()
+        is_super = current_user.get("role") in ("admin", "super_admin")
+        if org_id and not is_super:
+            query["organization_id"] = org_id
+
+        # Further narrow to agency/branch as before
         if current_user.get("role") == "agency":
             query["agency_id"] = current_user.get("agency_id")
         elif current_user.get("role") == "branch":
-            # Branch sees only its own bookings (not agency bookings under it)
             query["branch_id"] = current_user.get("branch_id")
-            query["agency_id"] = None  # Exclude agency bookings
+            query["agency_id"] = None
         
         # Fetch all approved bookings (Umrah and Custom)
         umrah_bookings = await db_ops.get_all(Collections.UMRAH_BOOKINGS, query)
@@ -204,7 +209,13 @@ async def get_pax_movement_list(
         
         # Build query
         query = {"booking_status": "approved"}
-        
+
+        # Always scope to caller's organization
+        org_id = (current_user.get("organization_id") or "").strip()
+        is_super = current_user.get("role") in ("admin", "super_admin")
+        if org_id and not is_super:
+            query["organization_id"] = org_id
+
         # Filter by user role
         if current_user.get("role") == "agency":
             query["agency_id"] = current_user.get("agency_id")

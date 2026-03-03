@@ -8,7 +8,7 @@ from app.models.form_submission import FormSubmissionCreate, FormSubmissionRespo
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, get_org_id
 from datetime import datetime
 
 router = APIRouter(prefix="/forms", tags=["Forms"])
@@ -16,12 +16,12 @@ router = APIRouter(prefix="/forms", tags=["Forms"])
 @router.post("/", response_model=FormResponse, status_code=status.HTTP_201_CREATED)
 async def create_form(
     form: FormCreate,
-    current_user: dict = Depends(get_current_user)
+    org_id: str = Depends(get_org_id),
 ):
-    """Create a new form"""
+    """Create a new form – stamped with caller's org"""
     form_dict = form.model_dump()
+    form_dict["organization_id"] = org_id
     form_dict['submissions'] = 0  # Initialize submission count
-    
     created_form = await db_ops.create(Collections.FORMS, form_dict)
     return serialize_doc(created_form)
 
@@ -29,10 +29,10 @@ async def create_form(
 async def get_forms(
     skip: int = 0,
     limit: int = 20,
-    current_user: dict = Depends(get_current_user)
+    org_id: str = Depends(get_org_id),
 ):
-    """Get all forms"""
-    forms = await db_ops.get_all(Collections.FORMS, skip=skip, limit=limit)
+    """Get forms scoped to caller's org"""
+    forms = await db_ops.get_all(Collections.FORMS, {"organization_id": org_id}, skip=skip, limit=limit)
     return serialize_docs(forms)
 
 @router.get("/{form_id}", response_model=FormResponse)

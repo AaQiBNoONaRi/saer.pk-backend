@@ -153,8 +153,14 @@ async def get_operation_stats(current_user: dict = Depends(get_current_user)):
         today_str = today.strftime("%Y-%m-%d")
         tomorrow_str = tomorrow.strftime("%Y-%m-%d")
         
-        # Build base query - filter by role
+        # Build base query - filter by org first, then by role
         base_query = {}
+        org_id = (current_user.get("organization_id") or "").strip()
+        is_super = current_user.get("role") in ("admin", "super_admin")
+        if org_id:
+            base_query["organization_id"] = org_id
+        elif not is_super:
+            raise HTTPException(status_code=403, detail="Organization context missing")
         if current_user.get("role") == "agency":
             base_query["agency_id"] = current_user.get("agency_id")
         elif current_user.get("role") == "branch":
@@ -228,13 +234,17 @@ async def get_daily_operations(
     try:
         # Build query
         query = {}
-        
+        org_id = (current_user.get("organization_id") or "").strip()
+        is_super = current_user.get("role") in ("admin", "super_admin")
+        if org_id:
+            query["organization_id"] = org_id
+        elif not is_super:
+            raise HTTPException(status_code=403, detail="Organization context missing")
         # Filter by role
         if current_user.get("role") == "agency":
             query["agency_id"] = current_user.get("agency_id")
         elif current_user.get("role") == "branch":
             query["branch_id"] = current_user.get("branch_id")
-        
         # Filter by status
         if status:
             query["status"] = status

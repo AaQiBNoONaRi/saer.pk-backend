@@ -3,62 +3,67 @@ Main FastAPI application
 """
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from contextlib import asynccontextmanager
+import asyncio
 from app.config.database import db_config
 from app.config.settings import settings
+from app.services.expiry_scheduler import run_expiry_scheduler
 
 from app.routes import (
     organization,
     branch,
     agency,
-    branch_auth,
-    agency_auth,
     employee,
-    hotel,
+    # Branch-level RBAC
+    branch_roles,
+    employee_permissions,
+    hotel, # Old name, might need rename if I changed the file name
     flight,
     transport,
     admin,
     others,
     package,
+    branch_auth,
+    agency_auth,
     discount,
     commission,
     service_charge,
-    ticket_booking,
-    umrah_booking,
-    custom_booking,
     # Hotel PMS Routers
     hotel_category,
     bed_type,
     hotel_floor,
     hotel_room,
     hotel_room_booking,
-    # Shared Inventory
-    org_links,
-    inventory_shares,
-    # Flight Search (AIQS)
-    flight_search,
-    bank_account,
     blog,
     form,
-    # HR, Payments, Operations, Pax Movement, Commission Records
-    hr,
+    bank_account,
+    # Payment System (Kuickapay)
     payment,
-    operations,
+    # Booking Routers
+    ticket_booking,
+    umrah_booking,
+    custom_booking,
+    # Pax Movement
     pax_movement,
-    commission_records,
-    # CRM, Bookings, Role Groups, Tasks, Debug
-    booking,
-    customers,
+    # Daily Operations
+    operations,
+    # CRM
     leads,
     passport_leads,
-    role_groups,
+    customers,
     tasks,
-    debug,
-    discounted_hotels,
-    ticket_inventory,
-    dashboard,
-    customer_booking,
+    role_groups,
+    # AIQS Flight Search
+    flight_search,
+    # HR Management
+    hr,
+    # Org Linking & Inventory Sharing
+    org_links,
+    inventory_shares,
 )
+from app.finance import routes as finance_routes
+from app.routes import debug, dashboard
 
 
 @asynccontextmanager
@@ -66,11 +71,18 @@ async def lifespan(app: FastAPI):
     """Application lifespan - startup and shutdown events"""
     # Startup
     await db_config.connect_db()
-    print(f"[START] {settings.APP_NAME} v{settings.VERSION} started")
+    print(f"🚀 {settings.APP_NAME} v{settings.VERSION} started")
+    # Start the booking expiry background scheduler
+    expiry_task = asyncio.create_task(run_expiry_scheduler(interval_seconds=60))
     yield
     # Shutdown
+    expiry_task.cancel()
+    try:
+        await expiry_task
+    except asyncio.CancelledError:
+        pass
     await db_config.close_db()
-    print("[STOP] Application shutdown")
+    print("👋 Application shutdown")
 
 # Create FastAPI app
 app = FastAPI(
@@ -79,60 +91,79 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# CORS middleware
+# CORS middleware - Must be added before other middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:5174",
         "http://localhost:5175",
-        "http://localhost:5176",
+        "http://localhost:5176",  # Agency portal
         "http://localhost:5177",
         "http://localhost:5178",
+        "http://localhost:5179",
+        "http://localhost:5180",  # Public portal
+        "http://localhost:5181",
+        "http://localhost:5182",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:5174",
         "http://127.0.0.1:5175",
         "http://127.0.0.1:5176",
         "http://127.0.0.1:5177",
         "http://127.0.0.1:5178",
+        "http://127.0.0.1:5179",
+        "http://127.0.0.1:5180",
+        "http://127.0.0.1:5181",
+        "http://127.0.0.1:5182",
+        "http://192.168.1.11:5173",
+        "http://192.168.1.11:5174",
+        "http://192.168.1.11:5175",
+        "http://192.168.1.11:5176",
+        "http://192.168.1.11:5177",
+        "http://192.168.1.11:5178",
+        "http://192.168.1.11:5179",
+        "http://192.168.1.11:5180",
+        "http://192.168.1.11:5181",
+        "http://192.168.1.11:5182",
+        "http://172.21.192.1:5173",
+        "http://172.21.192.1:5174",
+        "http://172.21.192.1:5175",
+        "http://172.21.192.1:5176",
+        "http://172.21.192.1:5177",
+        "http://172.21.192.1:5178",
+        "http://172.21.192.1:5179",
+        "http://172.21.192.1:5180",
+        "http://172.21.192.1:5181",
+        "http://172.21.192.1:5182",
+        "http://192.168.160.1:5173",
+        "http://192.168.160.1:5174",
+        "http://192.168.160.1:5175",
+        "http://192.168.160.1:5176",
+        "http://192.168.160.1:5177",
+        "http://192.168.160.1:5178",
+        "http://192.168.160.1:5179",
+        "http://192.168.160.1:5180",
+        "http://192.168.160.1:5181",
+        "http://192.168.160.1:5182",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
-# Request logging middleware
-from fastapi import Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-import time
-import json
+# Request logging middleware - temporarily disabled to test CORS
+# from fastapi import Request
+# import time
 
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    body = None
-    try:
-        body = await request.json()
-    except Exception:
-        pass
-    # Round-trip through json with default=str to handle non-serializable objects (e.g. ValueError)
-    safe_errors = json.loads(json.dumps(exc.errors(), default=str))
-    print("\n" + "="*60)
-    print(f"[422] VALIDATION ERROR on {request.method} {request.url.path}")
-    print(f"[ERRORS] {json.dumps(safe_errors, indent=2)}")
-    if body:
-        print(f"[BODY] {json.dumps(body, indent=2, default=str)}")
-    print("="*60 + "\n")
-    return JSONResponse(status_code=422, content={"detail": safe_errors})
-
-@app.middleware("http")
-async def log_requests(request: Request, call_next):
-    start_time = time.time()
-    print(f"\n[REQ] {request.method} {request.url.path}")
-    response = await call_next(request)
-    duration = time.time() - start_time
-    print(f"[RES] {request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
-    return response
+# @app.middleware("http")
+# async def log_requests(request: Request, call_next):
+#     start_time = time.time()
+#     print(f"\n🌐 {request.method} {request.url.path}")
+#     response = await call_next(request)
+#     duration = time.time() - start_time
+#     print(f"✅ {request.method} {request.url.path} - {response.status_code} ({duration:.2f}s)")
+#     return response
 
 # Mount static files
 from fastapi.staticfiles import StaticFiles
@@ -165,11 +196,9 @@ app.include_router(package.router, prefix="/api")
 app.include_router(discount.router, prefix="/api")
 app.include_router(commission.router, prefix="/api")
 app.include_router(service_charge.router, prefix="/api")
-# Shared Inventory
-app.include_router(org_links.router, prefix="/api")
-app.include_router(inventory_shares.router, prefix="/api")
-# Flight Search (AIQS)
-app.include_router(flight_search.router, prefix="/api")
+# Discounted Hotels
+from app.routes import discounted_hotels
+app.include_router(discounted_hotels.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
@@ -177,38 +206,110 @@ app.include_router(bank_account.router, prefix="/api")
 app.include_router(ticket_booking.router, prefix="/api")
 app.include_router(umrah_booking.router, prefix="/api")
 app.include_router(custom_booking.router, prefix="/api")
-app.include_router(customer_booking.router, prefix="/api")
-app.include_router(dashboard.router, prefix="/api")
-
-# HR, Payments, Operations, Pax Movement, Commission Records
-app.include_router(hr.router, prefix="/api")
-app.include_router(payment.router, prefix="/api")
-app.include_router(operations.router, prefix="/api")
 app.include_router(pax_movement.router, prefix="/api")
-app.include_router(commission_records.router, prefix="/api")
+app.include_router(operations.router, prefix="/api")
 
-# CRM, Bookings, Role Groups, Tasks, Debug, Discounted Hotels
-app.include_router(booking.router, prefix="/api")
-app.include_router(customers.router, prefix="/api")
+# Flight Search (AIQS)
+app.include_router(flight_search.router, prefix="/api")
+
+# Payment System (Kuickapay)
+app.include_router(payment.router, prefix="/api")
+
+# CRM
 app.include_router(leads.router, prefix="/api")
 app.include_router(passport_leads.router, prefix="/api")
-app.include_router(role_groups.router, prefix="/api")
+app.include_router(customers.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
+app.include_router(role_groups.router, prefix="/api")
 app.include_router(debug.router, prefix="/api")
-app.include_router(discounted_hotels.router, prefix="/api")
-app.include_router(ticket_inventory.router, prefix="/api")
+
+# HR Management
+app.include_router(hr.router, prefix="/api")
+
+# Org Linking & Inventory Shares
+app.include_router(org_links.router, prefix="/api")
+app.include_router(inventory_shares.router, prefix="/api")
+
+# Dashboard
+app.include_router(dashboard.router, prefix="/api")
+
+# Finance & Accounting Module
+app.include_router(finance_routes.router, prefix="/api")
+
+# Branch-level RBAC
+app.include_router(branch_roles.router, prefix="/api")
+app.include_router(employee_permissions.router, prefix="/api")
 
 
 
 
-@app.get("/")
+@app.get("/", response_class=HTMLResponse)
 async def root():
     """Root endpoint"""
-    return {
-        "app": settings.APP_NAME,
-        "version": settings.VERSION,
-        "status": "running"
-    }
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{settings.APP_NAME} - Running</title>
+        <style>
+            body {{
+                font-family: 'Inter', system-ui, -apple-system, sans-serif;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                height: 100vh;
+                background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+                color: #0f172a;
+                margin: 0;
+            }}
+            .card {{
+                background: white;
+                padding: 3rem;
+                border-radius: 24px;
+                box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+                text-align: center;
+                max-width: 400px;
+                width: 90%;
+            }}
+            .icon {{
+                font-size: 3rem;
+                margin-bottom: 1rem;
+            }}
+            h1 {{
+                margin: 0 0 0.5rem 0;
+                font-size: 1.875rem;
+                color: #166534;
+            }}
+            p {{
+                margin: 0 0 1.5rem 0;
+                color: #475569;
+                font-size: 1.125rem;
+            }}
+            .badge {{
+                display: inline-block;
+                padding: 0.5rem 1rem;
+                background: #f1f5f9;
+                color: #334155;
+                border-radius: 9999px;
+                font-weight: 600;
+                font-size: 0.875rem;
+                border: 1px solid #e2e8f0;
+            }}
+        </style>
+    </head>
+    <body>
+        <div class="card">
+            <div class="icon">🚀</div>
+            <h1>{settings.APP_NAME}</h1>
+            <p>API Backend is successfully running and accepting connections.</p>
+            <div class="badge">Version {settings.VERSION}</div>
+        </div>
+    </body>
+    </html>
+    """
 
 @app.get("/health")
 async def health_check():

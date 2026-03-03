@@ -33,7 +33,7 @@ from app.models.others import (
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, get_org_id
 
 router = APIRouter(prefix="/others", tags=["Others Management"])
 
@@ -44,21 +44,26 @@ router = APIRouter(prefix="/others", tags=["Others Management"])
 @router.post("/riyal-rate", response_model=RiyalRateResponse, status_code=status.HTTP_201_CREATED)
 async def create_riyal_rate(
     rate: RiyalRateCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create riyal exchange rate configuration"""
     rate_dict = rate.model_dump()
+    rate_dict = rate.model_dump()
+    rate_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.RIYAL_RATES, rate_dict)
     return serialize_doc(created)
 
 @router.get("/riyal-rate", response_model=List[RiyalRateResponse])
-async def get_riyal_rates(current_user: dict = Depends(get_current_user)):
+async def get_riyal_rates(current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)):
     """Get all riyal rate configurations"""
     rates = await db_ops.get_all(Collections.RIYAL_RATES, {})
     return serialize_docs(rates)
 
 @router.get("/riyal-rate/active", response_model=RiyalRateResponse)
-async def get_active_riyal_rate(current_user: dict = Depends(get_current_user)):
+async def get_active_riyal_rate(current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)):
     """Get the most recent (active) riyal rate"""
     rates = await db_ops.get_all(Collections.RIYAL_RATES, {}, limit=100)
     if not rates:
@@ -71,7 +76,8 @@ async def get_active_riyal_rate(current_user: dict = Depends(get_current_user)):
 async def update_riyal_rate(
     rate_id: str,
     rate_update: RiyalRateUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update riyal rate configuration"""
     update_data = rate_update.model_dump(exclude_unset=True)
@@ -85,7 +91,8 @@ async def update_riyal_rate(
 @router.delete("/riyal-rate/{rate_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_riyal_rate(
     rate_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete riyal rate configuration"""
     deleted = await db_ops.delete(Collections.RIYAL_RATES, rate_id)
@@ -99,20 +106,24 @@ async def delete_riyal_rate(
 @router.post("/shirka", response_model=ShirkaResponse, status_code=status.HTTP_201_CREATED)
 async def create_shirka(
     shirka: ShirkaCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new shirka (Saudi company)"""
     shirka_dict = shirka.model_dump()
+    shirka_dict = shirka.model_dump()
+    shirka_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.SHIRKAS, shirka_dict)
     return serialize_doc(created)
 
 @router.get("/shirka", response_model=List[ShirkaResponse])
 async def get_shirkas(
     is_active: bool = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all shirkas"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if is_active is not None:
         filter_query["is_active"] = is_active
     shirkas = await db_ops.get_all(Collections.SHIRKAS, filter_query)
@@ -121,19 +132,24 @@ async def get_shirkas(
 @router.get("/shirka/{shirka_id}", response_model=ShirkaResponse)
 async def get_shirka(
     shirka_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get shirka by ID"""
     shirka = await db_ops.get_by_id(Collections.SHIRKAS, shirka_id)
     if not shirka:
         raise HTTPException(status_code=404, detail="Shirka not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and shirka.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(shirka)
 
 @router.put("/shirka/{shirka_id}", response_model=ShirkaResponse)
 async def update_shirka(
     shirka_id: str,
     shirka_update: ShirkaUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update shirka"""
     update_data = shirka_update.model_dump(exclude_unset=True)
@@ -147,7 +163,8 @@ async def update_shirka(
 @router.delete("/shirka/{shirka_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_shirka(
     shirka_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete shirka"""
     deleted = await db_ops.delete(Collections.SHIRKAS, shirka_id)
@@ -161,20 +178,24 @@ async def delete_shirka(
 @router.post("/small-sectors", response_model=SmallSectorResponse, status_code=status.HTTP_201_CREATED)
 async def create_small_sector(
     sector: SmallSectorCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new small sector"""
     sector_dict = sector.model_dump()
+    sector_dict = sector.model_dump()
+    sector_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.SMALL_SECTORS, sector_dict)
     return serialize_doc(created)
 
 @router.get("/small-sectors", response_model=List[SmallSectorResponse])
 async def get_small_sectors(
     is_active: bool = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all small sectors"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if is_active is not None:
         filter_query["is_active"] = is_active
     sectors = await db_ops.get_all(Collections.SMALL_SECTORS, filter_query)
@@ -183,19 +204,24 @@ async def get_small_sectors(
 @router.get("/small-sectors/{sector_id}", response_model=SmallSectorResponse)
 async def get_small_sector(
     sector_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get small sector by ID"""
     sector = await db_ops.get_by_id(Collections.SMALL_SECTORS, sector_id)
     if not sector:
         raise HTTPException(status_code=404, detail="Small sector not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and sector.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(sector)
 
 @router.put("/small-sectors/{sector_id}", response_model=SmallSectorResponse)
 async def update_small_sector(
     sector_id: str,
     sector_update: SmallSectorUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update small sector"""
     update_data = sector_update.model_dump(exclude_unset=True)
@@ -209,7 +235,8 @@ async def update_small_sector(
 @router.delete("/small-sectors/{sector_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_small_sector(
     sector_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete small sector"""
     deleted = await db_ops.delete(Collections.SMALL_SECTORS, sector_id)
@@ -223,20 +250,24 @@ async def delete_small_sector(
 @router.post("/big-sectors", response_model=BigSectorResponse, status_code=status.HTTP_201_CREATED)
 async def create_big_sector(
     sector: BigSectorCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new big sector bundle"""
     sector_dict = sector.model_dump()
+    sector_dict = sector.model_dump()
+    sector_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.BIG_SECTORS, sector_dict)
     return serialize_doc(created)
 
 @router.get("/big-sectors", response_model=List[BigSectorResponse])
 async def get_big_sectors(
     is_active: bool = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all big sectors with populated small sector details"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if is_active is not None:
         filter_query["is_active"] = is_active
     
@@ -276,12 +307,16 @@ async def get_big_sectors(
 @router.get("/big-sectors/{sector_id}", response_model=BigSectorResponse)
 async def get_big_sector(
     sector_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get big sector by ID with details"""
     sector = await db_ops.get_by_id(Collections.BIG_SECTORS, sector_id)
     if not sector:
         raise HTTPException(status_code=404, detail="Big sector not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and sector.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
         
     # Populate details
     details = []
@@ -299,7 +334,8 @@ async def get_big_sector(
 async def update_big_sector(
     sector_id: str,
     sector_update: BigSectorUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update big sector"""
     update_data = sector_update.model_dump(exclude_unset=True)
@@ -313,7 +349,8 @@ async def update_big_sector(
 @router.delete("/big-sectors/{sector_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_big_sector(
     sector_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete big sector"""
     deleted = await db_ops.delete(Collections.BIG_SECTORS, sector_id)
@@ -327,20 +364,24 @@ async def delete_big_sector(
 @router.post("/visa-rates-pex", response_model=VisaRatesPexResponse, status_code=status.HTTP_201_CREATED)
 async def create_visa_rate_pex(
     rate: VisaRatesPexCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new visa rate (pax-wise)"""
     rate_dict = rate.model_dump()
+    rate_dict = rate.model_dump()
+    rate_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.VISA_RATES_PEX, rate_dict)
     return serialize_doc(created)
 
 @router.get("/visa-rates-pex", response_model=List[VisaRatesPexResponse])
 async def get_visa_rates_pex(
     is_active: bool = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all visa rates (pax-wise)"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if is_active is not None:
         filter_query["is_active"] = is_active
     rates = await db_ops.get_all(Collections.VISA_RATES_PEX, filter_query)
@@ -349,19 +390,24 @@ async def get_visa_rates_pex(
 @router.get("/visa-rates-pex/{rate_id}", response_model=VisaRatesPexResponse)
 async def get_visa_rate_pex(
     rate_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get visa rate (pax-wise) by ID"""
     rate = await db_ops.get_by_id(Collections.VISA_RATES_PEX, rate_id)
     if not rate:
         raise HTTPException(status_code=404, detail="Visa rate not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and rate.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(rate)
 
 @router.put("/visa-rates-pex/{rate_id}", response_model=VisaRatesPexResponse)
 async def update_visa_rate_pex(
     rate_id: str,
     rate_update: VisaRatesPexUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update visa rate (pax-wise)"""
     update_data = rate_update.model_dump(exclude_unset=True)
@@ -375,7 +421,8 @@ async def update_visa_rate_pex(
 @router.delete("/visa-rates-pex/{rate_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_visa_rate_pex(
     rate_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete visa rate (pax-wise)"""
     deleted = await db_ops.delete(Collections.VISA_RATES_PEX, rate_id)
@@ -389,20 +436,24 @@ async def delete_visa_rate_pex(
 @router.post("/only-visa-rates", response_model=OnlyVisaRateResponse, status_code=status.HTTP_201_CREATED)
 async def create_only_visa_rate(
     rate: OnlyVisaRateCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new only-visa rate"""
     rate_dict = rate.model_dump()
+    rate_dict = rate.model_dump()
+    rate_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.ONLY_VISA_RATES, rate_dict)
     return serialize_doc(created)
 
 @router.get("/only-visa-rates", response_model=List[OnlyVisaRateResponse])
 async def get_only_visa_rates(
     status_filter: str = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all only-visa rates"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if status_filter:
         filter_query["status"] = status_filter
     rates = await db_ops.get_all(Collections.ONLY_VISA_RATES, filter_query)
@@ -411,19 +462,24 @@ async def get_only_visa_rates(
 @router.get("/only-visa-rates/{rate_id}", response_model=OnlyVisaRateResponse)
 async def get_only_visa_rate(
     rate_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get only-visa rate by ID"""
     rate = await db_ops.get_by_id(Collections.ONLY_VISA_RATES, rate_id)
     if not rate:
         raise HTTPException(status_code=404, detail="Only-visa rate not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and rate.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(rate)
 
 @router.put("/only-visa-rates/{rate_id}", response_model=OnlyVisaRateResponse)
 async def update_only_visa_rate(
     rate_id: str,
     rate_update: OnlyVisaRateUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update only-visa rate"""
     update_data = rate_update.model_dump(exclude_unset=True)
@@ -437,7 +493,8 @@ async def update_only_visa_rate(
 @router.delete("/only-visa-rates/{rate_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_only_visa_rate(
     rate_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete only-visa rate"""
     deleted = await db_ops.delete(Collections.ONLY_VISA_RATES, rate_id)
@@ -451,20 +508,24 @@ async def delete_only_visa_rate(
 @router.post("/transport-prices", response_model=TransportPriceResponse, status_code=status.HTTP_201_CREATED)
 async def create_transport_price(
     price: TransportPriceCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new transport price"""
     price_dict = price.model_dump()
+    price_dict = price.model_dump()
+    price_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.TRANSPORT_PRICES, price_dict)
     return serialize_doc(created)
 
 @router.get("/transport-prices", response_model=List[TransportPriceResponse])
 async def get_transport_prices(
     status_filter: str = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all transport prices"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if status_filter:
         filter_query["status"] = status_filter
     prices = await db_ops.get_all(Collections.TRANSPORT_PRICES, filter_query)
@@ -473,19 +534,24 @@ async def get_transport_prices(
 @router.get("/transport-prices/{price_id}", response_model=TransportPriceResponse)
 async def get_transport_price(
     price_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get transport price by ID"""
     price = await db_ops.get_by_id(Collections.TRANSPORT_PRICES, price_id)
     if not price:
         raise HTTPException(status_code=404, detail="Transport price not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and price.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(price)
 
 @router.put("/transport-prices/{price_id}", response_model=TransportPriceResponse)
 async def update_transport_price(
     price_id: str,
     price_update: TransportPriceUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update transport price"""
     update_data = price_update.model_dump(exclude_unset=True)
@@ -499,7 +565,8 @@ async def update_transport_price(
 @router.delete("/transport-prices/{price_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_transport_price(
     price_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete transport price"""
     deleted = await db_ops.delete(Collections.TRANSPORT_PRICES, price_id)
@@ -513,20 +580,24 @@ async def delete_transport_price(
 @router.post("/food-prices", response_model=FoodPriceResponse, status_code=status.HTTP_201_CREATED)
 async def create_food_price(
     price: FoodPriceCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new food price"""
     price_dict = price.model_dump()
+    price_dict = price.model_dump()
+    price_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.FOOD_PRICES, price_dict)
     return serialize_doc(created)
 
 @router.get("/food-prices", response_model=List[FoodPriceResponse])
 async def get_food_prices(
     is_active: bool = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all food prices"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if is_active is not None:
         filter_query["is_active"] = is_active
     prices = await db_ops.get_all(Collections.FOOD_PRICES, filter_query)
@@ -535,19 +606,24 @@ async def get_food_prices(
 @router.get("/food-prices/{price_id}", response_model=FoodPriceResponse)
 async def get_food_price(
     price_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get food price by ID"""
     price = await db_ops.get_by_id(Collections.FOOD_PRICES, price_id)
     if not price:
         raise HTTPException(status_code=404, detail="Food price not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and price.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(price)
 
 @router.put("/food-prices/{price_id}", response_model=FoodPriceResponse)
 async def update_food_price(
     price_id: str,
     price_update: FoodPriceUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update food price"""
     update_data = price_update.model_dump(exclude_unset=True)
@@ -561,7 +637,8 @@ async def update_food_price(
 @router.delete("/food-prices/{price_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_food_price(
     price_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete food price"""
     deleted = await db_ops.delete(Collections.FOOD_PRICES, price_id)
@@ -575,20 +652,24 @@ async def delete_food_price(
 @router.post("/ziarat-prices", response_model=ZiaratPriceResponse, status_code=status.HTTP_201_CREATED)
 async def create_ziarat_price(
     price: ZiaratPriceCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new ziarat price"""
     price_dict = price.model_dump()
+    price_dict = price.model_dump()
+    price_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.ZIARAT_PRICES, price_dict)
     return serialize_doc(created)
 
 @router.get("/ziarat-prices", response_model=List[ZiaratPriceResponse])
 async def get_ziarat_prices(
     status_filter: str = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all ziarat prices"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if status_filter:
         filter_query["status"] = status_filter
     prices = await db_ops.get_all(Collections.ZIARAT_PRICES, filter_query)
@@ -597,19 +678,24 @@ async def get_ziarat_prices(
 @router.get("/ziarat-prices/{price_id}", response_model=ZiaratPriceResponse)
 async def get_ziarat_price(
     price_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get ziarat price by ID"""
     price = await db_ops.get_by_id(Collections.ZIARAT_PRICES, price_id)
     if not price:
         raise HTTPException(status_code=404, detail="Ziarat price not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and price.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(price)
 
 @router.put("/ziarat-prices/{price_id}", response_model=ZiaratPriceResponse)
 async def update_ziarat_price(
     price_id: str,
     price_update: ZiaratPriceUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update ziarat price"""
     update_data = price_update.model_dump(exclude_unset=True)
@@ -623,7 +709,8 @@ async def update_ziarat_price(
 @router.delete("/ziarat-prices/{price_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_ziarat_price(
     price_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete ziarat price"""
     deleted = await db_ops.delete(Collections.ZIARAT_PRICES, price_id)
@@ -637,20 +724,24 @@ async def delete_ziarat_price(
 @router.post("/flight-iata", response_model=FlightIATAResponse, status_code=status.HTTP_201_CREATED)
 async def create_flight_iata(
     flight: FlightIATACreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new airline registry"""
     flight_dict = flight.model_dump()
+    flight_dict = flight.model_dump()
+    flight_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.FLIGHT_IATA, flight_dict)
     return serialize_doc(created)
 
 @router.get("/flight-iata", response_model=List[FlightIATAResponse])
 async def get_flight_iatas(
     is_active: bool = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all airline registries"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if is_active is not None:
         filter_query["is_active"] = is_active
     flights = await db_ops.get_all(Collections.FLIGHT_IATA, filter_query)
@@ -659,19 +750,24 @@ async def get_flight_iatas(
 @router.get("/flight-iata/{flight_id}", response_model=FlightIATAResponse)
 async def get_flight_iata(
     flight_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get airline registry by ID"""
     flight = await db_ops.get_by_id(Collections.FLIGHT_IATA, flight_id)
     if not flight:
         raise HTTPException(status_code=404, detail="Flight IATA not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and flight.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(flight)
 
 @router.put("/flight-iata/{flight_id}", response_model=FlightIATAResponse)
 async def update_flight_iata(
     flight_id: str,
     flight_update: FlightIATAUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update airline registry"""
     update_data = flight_update.model_dump(exclude_unset=True)
@@ -685,7 +781,8 @@ async def update_flight_iata(
 @router.delete("/flight-iata/{flight_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_flight_iata(
     flight_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete airline registry"""
     deleted = await db_ops.delete(Collections.FLIGHT_IATA, flight_id)
@@ -699,20 +796,24 @@ async def delete_flight_iata(
 @router.post("/city-iata", response_model=CityIATAResponse, status_code=status.HTTP_201_CREATED)
 async def create_city_iata(
     city: CityIATACreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create new city registry"""
     city_dict = city.model_dump()
+    city_dict = city.model_dump()
+    city_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.CITY_IATA, city_dict)
     return serialize_doc(created)
 
 @router.get("/city-iata", response_model=List[CityIATAResponse])
 async def get_city_iatas(
     is_active: bool = None,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get all city registries"""
-    filter_query = {}
+    filter_query = {"organization_id": org_id} if org_id else {}
     if is_active is not None:
         filter_query["is_active"] = is_active
     cities = await db_ops.get_all(Collections.CITY_IATA, filter_query)
@@ -721,19 +822,24 @@ async def get_city_iatas(
 @router.get("/city-iata/{city_id}", response_model=CityIATAResponse)
 async def get_city_iata(
     city_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Get city registry by ID"""
     city = await db_ops.get_by_id(Collections.CITY_IATA, city_id)
     if not city:
         raise HTTPException(status_code=404, detail="City IATA not found")
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if org_id and city.get("organization_id") != org_id and not is_super:
+        raise HTTPException(status_code=403, detail="Access denied")
     return serialize_doc(city)
 
 @router.put("/city-iata/{city_id}", response_model=CityIATAResponse)
 async def update_city_iata(
     city_id: str,
     city_update: CityIATAUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update city registry"""
     update_data = city_update.model_dump(exclude_unset=True)
@@ -747,7 +853,8 @@ async def update_city_iata(
 @router.delete("/city-iata/{city_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_city_iata(
     city_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete city registry"""
     deleted = await db_ops.delete(Collections.CITY_IATA, city_id)
@@ -761,21 +868,26 @@ async def delete_city_iata(
 @router.post("/booking-expiry", response_model=BookingExpiryResponse, status_code=status.HTTP_201_CREATED)
 async def create_booking_expiry(
     expiry: BookingExpiryCreate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Create booking expiry settings"""
     expiry_dict = expiry.model_dump()
+    expiry_dict = expiry.model_dump()
+    expiry_dict["organization_id"] = org_id
     created = await db_ops.create(Collections.BOOKING_EXPIRY, expiry_dict)
     return serialize_doc(created)
 
 @router.get("/booking-expiry", response_model=List[BookingExpiryResponse])
-async def get_booking_expiries(current_user: dict = Depends(get_current_user)):
+async def get_booking_expiries(current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)):
     """Get all booking expiry configurations"""
     expiries = await db_ops.get_all(Collections.BOOKING_EXPIRY, {})
     return serialize_docs(expiries)
 
 @router.get("/booking-expiry/active", response_model=BookingExpiryResponse)
-async def get_active_booking_expiry(current_user: dict = Depends(get_current_user)):
+async def get_active_booking_expiry(current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)):
     """Get the most recent (active) booking expiry configuration"""
     expiries = await db_ops.get_all(Collections.BOOKING_EXPIRY, {}, limit=100)
     if not expiries:
@@ -788,7 +900,8 @@ async def get_active_booking_expiry(current_user: dict = Depends(get_current_use
 async def update_booking_expiry(
     expiry_id: str,
     expiry_update: BookingExpiryUpdate,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Update booking expiry settings"""
     update_data = expiry_update.model_dump(exclude_unset=True)
@@ -802,7 +915,8 @@ async def update_booking_expiry(
 @router.delete("/booking-expiry/{expiry_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_booking_expiry(
     expiry_id: str,
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Delete booking expiry configuration"""
     deleted = await db_ops.delete(Collections.BOOKING_EXPIRY, expiry_id)
@@ -821,7 +935,8 @@ from app.config.settings import settings
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_file(
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    org_id: str = Depends(get_org_id)
 ):
     """Upload a file and return its URL"""
     try:

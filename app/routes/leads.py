@@ -9,7 +9,7 @@ from typing import Optional, List
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, get_org_id
 
 router = APIRouter(prefix="/leads", tags=["Leads Management"])
 
@@ -101,7 +101,6 @@ class RemarkCreate(BaseModel):
 
 @router.get("/", summary="Get all leads")
 async def get_leads(
-    organization_id: Optional[str] = Query(None),
     branch_id: Optional[str] = Query(None),
     lead_status: Optional[str] = Query(None),
     conversion_status: Optional[str] = Query(None),
@@ -111,12 +110,11 @@ async def get_leads(
     is_internal_task: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500)
+    limit: int = Query(100, ge=1, le=500),
+    org_id: str = Depends(get_org_id),
 ):
-    """Return filtered leads list"""
-    filters = {}
-    if organization_id:
-        filters["organization_id"] = organization_id
+    """Return filtered leads scoped to caller's org"""
+    filters: dict = {"organization_id": org_id}
     if branch_id:
         filters["branch_id"] = branch_id
     if lead_status:
@@ -192,33 +190,28 @@ async def create_lead(
 
 
 @router.get("/today-followups", summary="Today's follow-ups")
-async def get_today_followups(
-    organization_id: Optional[str] = Query(None)
-):
-    """Get leads with today's follow-up date"""
+async def get_today_followups(org_id: str = Depends(get_org_id)):
+    """Get leads with today's follow-up date – scoped to caller's org"""
     today = date.today().isoformat()
-    filters = {"next_followup_date": today}
-    if organization_id:
-        filters["organization_id"] = organization_id
-
+    filters: dict = {"next_followup_date": today, "organization_id": org_id}
     leads = await db_ops.get_all(Collections.LEADS, filters)
     return serialize_docs(leads)
 
 
 @router.get("/overdue-loans", summary="Overdue loans")
-async def get_overdue_loans():
-    """Get leads with overdue loan recovery dates"""
+async def get_overdue_loans(org_id: str = Depends(get_org_id)):
+    """Get leads with overdue loan recovery dates – scoped to caller's org"""
     today = date.today().isoformat()
-    all_leads = await db_ops.get_all(Collections.LEADS, {"loan_status": "pending"})
+    all_leads = await db_ops.get_all(Collections.LEADS, {"loan_status": "pending", "organization_id": org_id})
     overdue = [l for l in all_leads if l.get("loan_promise_date") and l["loan_promise_date"] < today]
     return serialize_docs(overdue)
 
 
 @router.get("/{lead_id}", summary="Get single lead")
-async def get_lead(lead_id: str):
-    """Get a single lead by ID"""
+async def get_lead(lead_id: str, org_id: str = Depends(get_org_id)):
+    """Get a single lead by ID – org ownership check"""
     lead = await db_ops.get_by_id(Collections.LEADS, lead_id)
-    if not lead:
+    if not lead or lead.get("organization_id") != org_id:
         raise HTTPException(status_code=404, detail="Lead not found")
     return serialize_doc(lead)
 
@@ -227,10 +220,10 @@ async def get_lead(lead_id: str):
 async def update_lead(
     lead_id: str,
     updates: LeadUpdate,
+    org_id: str = Depends(get_org_id),
 ):
-    """Update lead fields — open endpoint, no authentication required"""
     lead = await db_ops.get_by_id(Collections.LEADS, lead_id)
-    if not lead:
+    if not lead or lead.get("organization_id") != org_id:
         raise HTTPException(status_code=404, detail="Lead not found")
 
     update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
@@ -241,10 +234,9 @@ async def update_lead(
 
 
 @router.delete("/{lead_id}", summary="Delete lead")
-async def delete_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
-    """Delete a lead"""
+async def delete_lead(lead_id: str, org_id: str = Depends(get_org_id)):
     lead = await db_ops.get_by_id(Collections.LEADS, lead_id)
-    if not lead:
+    if not lead or lead.get("organization_id") != org_id:
         raise HTTPException(status_code=404, detail="Lead not found")
     await db_ops.delete(Collections.LEADS, lead_id)
     return {"message": "Lead deleted successfully"}

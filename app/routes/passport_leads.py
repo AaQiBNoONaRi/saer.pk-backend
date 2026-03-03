@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
-from app.utils.auth import get_current_user
+from app.utils.auth import get_current_user, get_org_id
 
 router = APIRouter(prefix="/passport-leads", tags=["Passport Leads"])
 
@@ -79,20 +79,27 @@ class PassportLeadUpdate(BaseModel):
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
-@router.get("/", summary="Get all passport leads")
+@router.get("/", summary="List passport leads")
 async def get_passport_leads(
-    organization_id: Optional[str] = Query(None),
-    branch_id: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    # service_type filter removed for passport leads
-    search: Optional[str] = Query(None),
+    status: Optional[str] = None,
+    branch_id: Optional[str] = None,
+    organization_id: Optional[str] = None,
+    search: Optional[str] = None,
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=500)
+    limit: int = Query(50, ge=1, le=100),
+    current_user: dict = Depends(get_current_user)
 ):
     """Return filtered passport leads list"""
-    filters = {}
-    if organization_id:
-        filters["organization_id"] = organization_id
+    org_id_caller = (current_user.get("organization_id") or "").strip()
+    filters: dict = {}
+    if org_id_caller:
+        filters["organization_id"] = org_id_caller
+    else:
+        if current_user.get("role") not in ("admin", "super_admin"):
+            raise HTTPException(status_code=403, detail="Organization context missing")
+        if organization_id:
+            filters["organization_id"] = organization_id
+
     if branch_id:
         filters["branch_id"] = branch_id
     if status:
@@ -117,6 +124,9 @@ async def create_passport_lead(
     current_user: dict = Depends(get_current_user)
 ):
     """Create a new passport lead"""
+    org_id = (current_user.get("organization_id") or "").strip()
+    if not org_id and current_user.get("role") not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Organization context missing")
     lead_dict = lead.model_dump()
     # Strip fields that should not be stored for passport leads
     for _k in ('service_type', 'travel_date', 'return_date', 'last_contacted_date', 'booking_id', 'email'):
@@ -126,12 +136,11 @@ async def create_passport_lead(
     if not lead_dict.get("created_by"):
         lead_dict["created_by"] = str(current_user.get("_id") or current_user.get("sub") or current_user.get("emp_id") or current_user.get("id") or "")
         
+    lead_dict["organization_id"] = org_id
     entity_type = current_user.get("entity_type")
     entity_id = current_user.get("entity_id")
     
-    if entity_type == "organization":
-        if not lead_dict.get("organization_id"): lead_dict["organization_id"] = str(entity_id)
-    elif entity_type == "branch":
+    if entity_type == "branch":
         if not lead_dict.get("branch_id"): lead_dict["branch_id"] = str(entity_id)
         if not lead_dict.get("organization_id") and current_user.get("organization_id"):
             lead_dict["organization_id"] = str(current_user["organization_id"])
@@ -156,9 +165,11 @@ async def create_passport_lead(
 
 
 @router.get("/{lead_id}", summary="Get single passport lead")
-async def get_passport_lead(lead_id: str):
+async def get_passport_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
     record = await db_ops.get_by_id(Collections.PASSPORT_LEADS, lead_id)
-    if not record:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not record or (org_id and record.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Passport lead not found")
     return serialize_doc(record)
 
@@ -170,7 +181,9 @@ async def update_passport_lead(
     current_user: dict = Depends(get_current_user)
 ):
     record = await db_ops.get_by_id(Collections.PASSPORT_LEADS, lead_id)
-    if not record:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not record or (org_id and record.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Passport lead not found")
 
     update_data = {k: v for k, v in updates.model_dump().items() if v is not None}
@@ -186,7 +199,9 @@ async def update_passport_lead(
 @router.delete("/{lead_id}", summary="Delete passport lead")
 async def delete_passport_lead(lead_id: str, current_user: dict = Depends(get_current_user)):
     record = await db_ops.get_by_id(Collections.PASSPORT_LEADS, lead_id)
-    if not record:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not record or (org_id and record.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Passport lead not found")
     await db_ops.delete(Collections.PASSPORT_LEADS, lead_id)
     return {"message": "Passport lead deleted successfully"}

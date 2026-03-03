@@ -12,8 +12,9 @@ class DatabaseConfig:
     """MongoDB database configuration"""
     
     def __init__(self):
-        self.MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+        self.MONGO_URI = os.getenv("MONGO_URI", "mongodb://rafay:R%40fay_25018%23Secure2026%21@16.171.132.125:25018/admin?authSource=admin")
         self.DATABASE_NAME = os.getenv("DATABASE_NAME", "saerpk_db")
+        
         self.client: Optional[AsyncIOMotorClient] = None
         self.database = None
     
@@ -24,16 +25,16 @@ class DatabaseConfig:
             self.database = self.client[self.DATABASE_NAME]
             # Test connection
             await self.client.admin.command('ping')
-            print(f"[OK] Connected to MongoDB: {self.DATABASE_NAME}")
+            print(f"✅ Connected to MongoDB: {self.DATABASE_NAME}")
         except Exception as e:
-            print(f"[ERROR] Error connecting to MongoDB: {e}")
+            print(f"❌ Error connecting to MongoDB: {e}")
             raise
     
     async def close_db(self):
         """Close MongoDB connection"""
         if self.client:
             self.client.close()
-            print("[OK] MongoDB connection closed")
+            print("✅ MongoDB connection closed")
     
     def get_collection(self, collection_name: str):
         """Get a specific collection"""
@@ -52,6 +53,11 @@ class Collections:
     EMPLOYEES = "employees"
     CUSTOMERS = "customers"
     HOTELS = "hotels"
+    HOTEL_CATEGORIES = "hotel_categories"
+    HOTEL_FLOORS = "hotel_floors"
+    HOTEL_ROOMS = "hotel_rooms"
+    HOTEL_ROOM_BOOKINGS = "hotel_room_bookings"
+    BED_TYPES = "bed_types"
     FLIGHTS = "flights"
     TICKET_INVENTORY = "ticket_inventory"
     VISAS = "visas"
@@ -59,19 +65,17 @@ class Collections:
     FOOD = "food"
     ZIYARAT = "ziyarat"
     PACKAGES = "packages"
-    
-    # Separate Booking Collections
+    BOOKINGS = "bookings"
     TICKET_BOOKINGS = "ticket_bookings"
     UMRAH_BOOKINGS = "umrah_bookings"
     CUSTOM_BOOKINGS = "custom_bookings"
-    CUSTOMER_BOOKINGS = "customer_bookings"   # Public website bookings (no login)
-    BOOKINGS = "bookings"  # Legacy - will be removed
-    
     LEDGER = "ledger"
     OPERATIONS = "operations"
     PAYMENTS = "payments"
-    BANK_ACCOUNTS = "bank_accounts"
     ADMINS = "admins"
+    BANK_ACCOUNTS = "bank_accounts"
+    BLOGS = "blogs"
+    FORMS = "forms"
     
     # Others Management Collections
     RIYAL_RATES = "riyal_rates"
@@ -86,15 +90,27 @@ class Collections:
     FLIGHT_IATA = "flight_iata"
     CITY_IATA = "city_iata"
     BOOKING_EXPIRY = "booking_expiry"
-    
-    # Financial Collections
-    DISCOUNTS = "discounts"
-    COMMISSIONS = "commissions"
     SERVICE_CHARGES = "service_charges"
+    COMMISSIONS = "commissions"
+    DISCOUNTS = "discounts"
+    DISCOUNTED_HOTELS = "discounted_hotels"
+    # Org linking and inventory sharing
+    ORG_LINKS = "org_links"
+    INVENTORY_SHARES = "inventory_shares"
+    LEADS = "leads"
     
     # Content Management Collections
     BLOGS = "blogs"
     FORMS = "forms"
+    FORM_SUBMISSIONS = "form_submissions"
+    
+    # HR Management Collections
+    HR_ATTENDANCE = "hr_attendance"
+    HR_MOVEMENT_LOGS = "hr_movement_logs"
+    HR_PUNCTUALITY_RECORDS = "hr_punctuality_records"
+    HR_LEAVE_REQUESTS = "hr_leave_requests"
+    HR_FINES = "hr_fines"
+    HR_SALARY_PAYMENTS = "hr_salary_payments"
     # Hotel PMS Collections
     HOTEL_CATEGORIES = "hotel_categories"
     BED_TYPES = "bed_types"
@@ -105,3 +121,23 @@ class Collections:
     # Shared Inventory Collections
     ORG_LINKS = "org_links"
     INVENTORY_SHARES = "inventory_shares"
+
+    # Payment Collections (Kuickapay)
+    VOUCHERS = "vouchers"
+    TRANSACTIONS = "transactions"
+    WALLETS = "wallets"
+
+    # CRM Collections
+    LEADS = "leads"
+    PASSPORT_LEADS = "passport_leads"
+    TASKS = "tasks"
+    CUSTOMERS = "customers"  # already set above, but alias here for clarity
+
+    # Finance & Accounting Collections
+    CHART_OF_ACCOUNTS = "chart_of_accounts"
+    JOURNAL_ENTRIES = "journal_entries"
+    AUDIT_TRAIL = "audit_trail"
+
+    # Branch RBAC Collections
+    BRANCH_ROLES = "branch_roles"
+    EMPLOYEE_PERMISSION_OVERRIDES = "employee_permission_overrides"

@@ -3,7 +3,7 @@ Umrah Package Booking routes - Dedicated API for Umrah package bookings
 """
 from fastapi import APIRouter, HTTPException, status, Depends, UploadFile, File
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime
 import random, string, os, shutil, uuid
 from pydantic import BaseModel
 
@@ -11,12 +11,14 @@ from app.database.db_operations import db_ops
 from app.config.database import Collections
 from app.utils.helpers import serialize_doc, serialize_docs
 from app.utils.auth import get_current_user
+from app.finance.journal_engine import create_umrah_booking_journal
 
 router = APIRouter(prefix="/umrah-bookings", tags=["Umrah Bookings"])
 
 # ── Pydantic models (self-contained so booking.py is not required) ──────────
 
 class PassengerData(BaseModel):
+    model_config = {"extra": "allow"}
     type: str  # adult | child | infant
     room_type: Optional[str] = None
     room_index: Optional[int] = None
@@ -39,35 +41,78 @@ class PassengerData(BaseModel):
     is_family_head: Optional[bool] = False
     family_head_name: Optional[str] = None
     family_head_passport: Optional[str] = None
+    # ── Per-passenger service status tracking ──
+    visa_status: Optional[str] = "Pending"       # Pending / Approved / Rejected
+    ticket_status: Optional[str] = "Pending"     # Pending / Confirmed / Cancelled
+    hotel_status: Optional[str] = "Pending"      # Pending / Checked In / Checked Out
+    food_status: Optional[str] = "Pending"       # Pending / Served
+    ziyarat_status: Optional[str] = "Pending"    # Pending / Completed
+    transport_status: Optional[str] = "Pending"  # Pending / Departed
+    # ── Shirka (Saudi company) — filled during order delivery ──
+    shirka: Optional[str] = None
 
 class RoomSelection(BaseModel):
+    model_config = {"extra": "allow"}
     room_type: str   # sharing|quint|quad|triple|double
     quantity: int
     price_per_person: float
+    # ── Hotel details snapshot/snapshot (optional, used for vouchers) ──
+    hotel_id: Optional[str] = None
+    hotel_name: Optional[str] = None
+    city: Optional[str] = None
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    nights: Optional[int] = 0
+    # ── Hotel voucher — filled during order delivery ──
+    hotel_voucher_number: Optional[str] = None
+    hotel_brn: Optional[str] = None
 
 class UmrahBookingCreate(BaseModel):
+    model_config = {"extra": "allow"}
     package_id: str
     package_details: Optional[Dict[str, Any]] = None   # full package object (includes flight, hotels, transport, prices)
     rooms_selected: List[RoomSelection] = []
     passengers: List[PassengerData] = []
     total_passengers: int = 0
     total_amount: float = 0
+    discount_group_id: Optional[str] = None  # ID of the discount group applied
+    discount_amount: Optional[float] = 0     # Calculated discount amount
     payment_method: Optional[str] = None
     payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
     booking_status: str = "underprocess"
+    # Voucher status — starts as Draft, updated during delivery
+    voucher_status: Optional[str] = "Draft"
     notes: Optional[str] = None
     # Hierarchy snapshots (populated server-side, ignored if sent by client)
     agency_details: Optional[Dict[str, Any]] = None
     branch_details: Optional[Dict[str, Any]] = None
     organization_details: Optional[Dict[str, Any]] = None
+    # ── Food & Ziyarat vouchers ──
+    food_voucher_number: Optional[str] = None
+    food_brn: Optional[str] = None
+    ziyarat_voucher_number: Optional[str] = None
+    ziyarat_brn: Optional[str] = None
 
 class UmrahBookingUpdate(BaseModel):
+    model_config = {"extra": "allow"}
     booking_status: Optional[str] = None
+    voucher_status: Optional[str] = None
     payment_method: Optional[str] = None
     payment_status: Optional[str] = None
     payment_details: Optional[Dict[str, Any]] = None
     notes: Optional[str] = None
+    passengers: Optional[List[PassengerData]] = None
+    rooms_selected: Optional[List[RoomSelection]] = None
+    shirka: Optional[str] = None
+    package_details: Optional[Dict[str, Any]] = None
+    # ── Transport voucher — filled during order delivery ──
+    transport_voucher_number: Optional[str] = None
+    transport_brn: Optional[str] = None
+    food_voucher_number: Optional[str] = None
+    food_brn: Optional[str] = None
+    ziyarat_voucher_number: Optional[str] = None
+    ziyarat_brn: Optional[str] = None
 
 PASSPORT_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "passports")
 os.makedirs(PASSPORT_UPLOAD_DIR, exist_ok=True)
@@ -111,18 +156,15 @@ async def create_umrah_booking(
     booking_dict['booking_type'] = 'umrah_package'
     booking_dict['booking_reference'] = generate_booking_reference()
     booking_dict['created_by'] = current_user.get('email') or current_user.get('username')
-    now_utc = datetime.utcnow()
-    booking_dict['created_at'] = now_utc.isoformat()
-    booking_dict['payment_deadline'] = (now_utc + timedelta(hours=24)).isoformat()
+    booking_dict['created_at'] = datetime.utcnow().isoformat()
+    # Set payment deadline (e.g., 3 hours from now)
+    from datetime import timedelta
+    booking_dict['payment_deadline'] = (datetime.utcnow() + timedelta(hours=3)).isoformat() + "Z"
 
     # ── resolve IDs from JWT (sub = entity's _id; _id key is NOT in payload) ──
     role = current_user.get('role')
     agency_id = current_user.get('agency_id')  or (current_user.get('sub') if role == 'agency' else None)
-    branch_id = (
-        current_user.get('branch_id') or
-        (current_user.get('sub') if role == 'branch' else None) or
-        (current_user.get('entity_id') if current_user.get('entity_type') == 'branch' else None)
-    )
+    branch_id = current_user.get('branch_id')  or (current_user.get('sub') if role == 'branch' else None)
     org_id    = current_user.get('organization_id')
 
     booking_dict['agency_id']       = agency_id
@@ -133,6 +175,20 @@ async def create_umrah_booking(
         current_user.get('branch_name') or
         current_user.get('email', 'Unknown')
     )
+
+    # ── Record Booker Identity ──
+    booking_dict['booked_by_role'] = role
+    booking_dict['booked_by_id'] = current_user.get('sub')
+    booking_dict['booked_by_name'] = (
+        current_user.get('name') or 
+        current_user.get('agency_name') or 
+        current_user.get('branch_name') or 
+        current_user.get('email', 'Unknown')
+    )
+
+    # ── If branch books directly, ensure agency_id is null ──
+    if role == 'branch':
+        booking_dict['agency_id'] = None
 
     # ── fetch & embed full hierarchy documents (strip password fields) ──
     if agency_id:
@@ -154,45 +210,145 @@ async def create_umrah_booking(
         if org_doc:
             booking_dict['organization_details'] = serialize_doc(org_doc)
 
-    created_booking = await db_ops.create(Collections.UMRAH_BOOKINGS, booking_dict)
-    return serialize_doc(created_booking)
+    # ── resolve flight ID → full flight doc ──
+    pkg_details = booking_dict.get('package_details') or {}
+    flight_ref = pkg_details.get('flight')
+    if isinstance(flight_ref, str) and flight_ref:
+        flight_doc = await db_ops.get_by_id(Collections.FLIGHTS, flight_ref)
+        if flight_doc:
+            booking_dict['package_details']['flight'] = serialize_doc(flight_doc)
 
-async def _ensure_payment_deadline(booking: dict, collection) -> dict:
-    """If payment_deadline is missing, derive it from created_at + 24h and persist."""
-    if not booking.get('payment_deadline') and booking.get('created_at'):
-        try:
-            deadline = (datetime.fromisoformat(booking['created_at']) + timedelta(hours=24)).isoformat()
-        except Exception:
-            deadline = (datetime.utcnow() + timedelta(hours=24)).isoformat()
-        booking['payment_deadline'] = deadline
-        await db_ops.update(collection, str(booking.get('_id', '')), {'payment_deadline': deadline})
-    return booking
+    # ── resolve transport ID → full transport doc ──
+    transport_ref = pkg_details.get('transport')
+    if isinstance(transport_ref, str) and transport_ref:
+        transport_doc = await db_ops.get_by_id(Collections.TRANSPORT, transport_ref)
+        if transport_doc:
+            transport_obj = serialize_doc(transport_doc)
+        else:
+            transport_obj = {'id': transport_ref}
+        transport_obj.setdefault('brn', None)
+        transport_obj.setdefault('voucher_no', None)
+        booking_dict['package_details']['transport'] = transport_obj
+    elif isinstance(transport_ref, dict):
+        booking_dict['package_details']['transport'].setdefault('brn', None)
+        booking_dict['package_details']['transport'].setdefault('voucher_no', None)
+
+    # ── resolve food ID → full food doc ──
+    food_ref = pkg_details.get('food') or pkg_details.get('fooding')
+    food_key = 'food' if 'food' in pkg_details else ('fooding' if 'fooding' in pkg_details else 'food')
+    if isinstance(food_ref, str) and food_ref:
+        food_doc = await db_ops.get_by_id(Collections.FOOD_PRICES, food_ref)
+        if food_doc:
+            food_obj = serialize_doc(food_doc)
+        else:
+            food_obj = {'id': food_ref}
+        food_obj.setdefault('brn', None)
+        food_obj.setdefault('voucher_no', None)
+        booking_dict['package_details'][food_key] = food_obj
+    elif isinstance(food_ref, dict):
+        booking_dict['package_details'][food_key].setdefault('brn', None)
+        booking_dict['package_details'][food_key].setdefault('voucher_no', None)
+
+    # ── resolve ziyarat ID → full ziyarat doc ──
+    ziyarat_ref = pkg_details.get('ziyarat') or pkg_details.get('ziarat')
+    ziyarat_key = 'ziyarat' if 'ziyarat' in pkg_details else ('ziarat' if 'ziarat' in pkg_details else 'ziyarat')
+    if isinstance(ziyarat_ref, str) and ziyarat_ref:
+        ziyarat_doc = await db_ops.get_by_id(Collections.ZIARAT_PRICES, ziyarat_ref)
+        if ziyarat_doc:
+            ziyarat_obj = serialize_doc(ziyarat_doc)
+        else:
+            ziyarat_obj = {'id': ziyarat_ref}
+        ziyarat_obj.setdefault('brn', None)
+        ziyarat_obj.setdefault('voucher_no', None)
+        booking_dict['package_details'][ziyarat_key] = ziyarat_obj
+    elif isinstance(ziyarat_ref, dict):
+        booking_dict['package_details'][ziyarat_key].setdefault('brn', None)
+        booking_dict['package_details'][ziyarat_key].setdefault('voucher_no', None)
+
+    # ── Initialize top-level voucher fields for order delivery ──
+    booking_dict['transport_brn'] = None
+    booking_dict['transport_voucher_number'] = None
+    booking_dict['food_brn'] = None
+    booking_dict['food_voucher_number'] = None
+    booking_dict['ziyarat_brn'] = None
+    booking_dict['ziyarat_voucher_number'] = None
+    booking_dict['hotel_brn'] = None
+    booking_dict['hotel_voucher_number'] = None
+    booking_dict['shirka'] = None
+    booking_dict['voucher_status'] = 'Draft'
+
+    created_booking = await db_ops.create(Collections.UMRAH_BOOKINGS, booking_dict)
+    created = serialize_doc(created_booking)
+
+    # ── Auto-generate double-entry journal ──────────────────────────────────
+    try:
+        await create_umrah_booking_journal(
+            booking=created,
+            organization_id=org_id,
+            branch_id=branch_id,
+            agency_id=agency_id,
+            created_by=booking_dict['created_by'],
+        )
+    except Exception as je:
+        # Journal failure must NOT block the booking – log and continue
+        print(f"⚠️  Journal engine warning for {created.get('booking_reference')}: {je}")
+
+    # ── Auto-create pending payment for bank/cash ───────────────────────────
+    pmt_method = booking_dict.get("payment_method")
+    if pmt_method in ["bank_transfer", "bank", "cash", "bank transfer", "online"]:
+        payment_doc = {
+            "booking_id": str(created.get('_id')),
+            "booking_type": "umrah",
+            "payment_method": pmt_method,
+            "amount": float(booking_dict.get('total_amount') or 0),
+            "payment_date": booking_dict['created_at'],
+            "status": "pending",
+            "agency_id": agency_id,
+            "branch_id": branch_id,
+            "organization_id": org_id,
+            "agent_name": booking_dict.get('agent_name'),
+            "created_by": booking_dict['created_by'],
+            "created_at": booking_dict['created_at'],
+            "updated_at": booking_dict['created_at'],
+        }
+        await db_ops.create(Collections.PAYMENTS, payment_doc)
+
+    return created
+
+@router.get("/")
 async def get_umrah_bookings(
     booking_status: Optional[str] = None,
     payment_status: Optional[str] = None,
     booking_reference: Optional[str] = None,
+    organization_id: Optional[str] = None,
     skip: int = 0,
-    limit: int = 50,
+    limit: int = 100,
     current_user: dict = Depends(get_current_user)
 ):
     filter_query = {}
-    # Filter by agency/branch
-    role = current_user.get('role')
-    entity_type = current_user.get('entity_type')
-    entity_id = current_user.get('entity_id')
+    
+    role = current_user.get('role', '')
+    entity_type = (current_user.get('entity_type') or '').lower()
+    
+    org_id = current_user.get("organization_id")
+    if not org_id and role not in ("admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Organization context missing")
 
-    if role == 'agency' or entity_type == 'agency':
-        aid = current_user.get('agency_id') or entity_id or current_user.get('sub')
+    if role in ('organization', 'org', 'admin', 'super_admin') or entity_type in ('organization', 'org'):
+        if org_id:
+            filter_query['organization_id'] = str(org_id)
+            # Ensure it's an organization-level booking (not branch or agency)
+            filter_query['branch_id'] = None
+            filter_query['agency_id'] = None
+    elif role == 'agency' or entity_type == 'agency':
+        aid = current_user.get('agency_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['agency_id'] = aid
-        # Restrict to only bookings created by this user/email
-        if current_user.get('email'):
-            filter_query['created_by'] = current_user.get('email')
     elif role == 'branch' or entity_type == 'branch':
-        bid = current_user.get('branch_id') or entity_id or current_user.get('sub')
+        bid = current_user.get('branch_id') or current_user.get('entity_id') or current_user.get('sub')
         filter_query['branch_id'] = bid
-        # Restrict to only bookings created by this user/email
-        if current_user.get('email'):
-            filter_query['created_by'] = current_user.get('email')
+        # Only show bookings made directly by the branch
+        filter_query['booked_by_role'] = 'branch'
+
     if booking_status:
         filter_query['booking_status'] = booking_status
     if payment_status:
@@ -200,18 +356,49 @@ async def get_umrah_bookings(
     if booking_reference:
         filter_query['booking_reference'] = {"$regex": booking_reference, "$options": "i"}
     bookings = await db_ops.get_all(Collections.UMRAH_BOOKINGS, filter_query, skip=skip, limit=limit)
-    enriched = []
-    for b in bookings:
-        b = await _ensure_payment_deadline(b, Collections.UMRAH_BOOKINGS)
-        enriched.append(b)
-    return serialize_docs(enriched)
+    serialized_bookings = serialize_docs(bookings)
+    
+    # ── Bulk enrich flight data for display ──
+    flight_ids = set()
+    for b in serialized_bookings:
+        f = (b.get('package_details') or {}).get('flight')
+        if isinstance(f, str) and f:
+            flight_ids.add(f)
+    
+    if flight_ids:
+        # Fetch all required flights in one go
+        from bson import ObjectId
+        flight_docs = await db_ops.get_all(Collections.FLIGHTS, {"_id": {"$in": [ObjectId(fid) if isinstance(fid, str) and len(fid)==24 else fid for fid in list(flight_ids)]}})
+        flight_map = {str(f.get('_id') or f.get('id')): serialize_doc(f) for f in flight_docs}
+        
+        for b in serialized_bookings:
+            f_ref = b.get('package_details', {}).get('flight')
+            if isinstance(f_ref, str) and f_ref in flight_map:
+                b['package_details']['flight'] = flight_map[f_ref]
+                
+    return serialized_bookings
 
 @router.get("/{booking_id}")
 async def get_umrah_booking(booking_id: str, current_user: dict = Depends(get_current_user)):
     booking = await db_ops.get_by_id(Collections.UMRAH_BOOKINGS, booking_id)
-    if not booking:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not booking or (org_id and booking.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Umrah booking not found")
-    return serialize_doc(booking)
+    
+    booking_data = serialize_doc(booking)
+    
+    # ── Enrich flight data if package_details.flight is just an ID string ──
+    pkg = booking_data.get('package_details') or {}
+    flight_ref = pkg.get('flight')
+    if isinstance(flight_ref, str) and flight_ref:
+        # It's a flight ID — fetch full flight doc and embed it
+        flight_doc = await db_ops.get_by_id(Collections.FLIGHTS, flight_ref)
+        if flight_doc:
+            booking_data['package_details']['flight'] = serialize_doc(flight_doc)
+    
+    return booking_data
+
 
 @router.put("/{booking_id}")
 async def update_umrah_booking(
@@ -223,14 +410,31 @@ async def update_umrah_booking(
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
     booking = await db_ops.get_by_id(Collections.UMRAH_BOOKINGS, booking_id)
-    if not booking:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not booking or (org_id and booking.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Umrah booking not found")
+
+    # ── Expand package_details into dot-notation to do a deep merge ──
+    # This prevents $set from overwriting the entire package_details object.
+    pkg = update_data.pop('package_details', None)
+    if pkg and isinstance(pkg, dict):
+        for sub_key, sub_val in pkg.items():
+            # For nested objects (food, transport, ziyarat), expand further
+            if isinstance(sub_val, dict):
+                for inner_key, inner_val in sub_val.items():
+                    update_data[f'package_details.{sub_key}.{inner_key}'] = inner_val
+            else:
+                update_data[f'package_details.{sub_key}'] = sub_val
+
     updated_booking = await db_ops.update(Collections.UMRAH_BOOKINGS, booking_id, update_data)
     return serialize_doc(updated_booking)
 
 @router.delete("/{booking_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def cancel_umrah_booking(booking_id: str, current_user: dict = Depends(get_current_user)):
     booking = await db_ops.get_by_id(Collections.UMRAH_BOOKINGS, booking_id)
-    if not booking:
+    org_id = (current_user.get("organization_id") or "").strip()
+    is_super = current_user.get("role") in ("admin", "super_admin")
+    if not booking or (org_id and booking.get("organization_id") != org_id and not is_super):
         raise HTTPException(status_code=404, detail="Umrah booking not found")
     await db_ops.update(Collections.UMRAH_BOOKINGS, booking_id, {"booking_status": "cancelled"})

@@ -81,6 +81,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
                     # Fallback: derive from entity_id when entity_type is 'organization'
                     if not found_org and (employee.get("entity_type") or "").lower() == "organization":
                         found_org = (employee.get("entity_id") or "").strip()
+                    elif not found_org and (employee.get("entity_type") or "").lower() == "branch":
+                        branch = await db_ops.get_by_id(Collections.BRANCHES, employee.get("entity_id"))
+                        if branch:
+                            found_org = (branch.get("organization_id") or "").strip()
+                    elif not found_org and (employee.get("entity_type") or "").lower() == "agency":
+                        agency = await db_ops.get_by_id(Collections.AGENCIES, employee.get("entity_id"))
+                        if agency:
+                            found_org = (agency.get("organization_id") or "").strip()
+                            
                     if found_org:
                         payload["organization_id"] = found_org
             except Exception as e:
@@ -212,3 +221,120 @@ def has_module_permission(current_user: Dict, module_code: str, action: str) -> 
 
     # also allow startswith checks for broader permissions
     return any(p.startswith(module_code) for p in perms)
+
+
+# ─── Org-isolation helpers ────────────────────────────────────────────────────
+
+def get_org_id(current_user: Dict = Depends(get_current_user)) -> str:
+    """
+    FastAPI dependency: extract organization_id from the JWT and return it.
+    Raises HTTP 403 if the token has no organization_id (e.g. bare agency token).
+    Use this on every endpoint that must be org-scoped.
+    """
+    org_id = current_user.get("organization_id") or current_user.get("sub")
+    if not org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No organization associated with this account.",
+        )
+    return str(org_id)
+
+
+async def get_shared_org_ids(org_id: str, inventory_type: str) -> list:
+    """
+    Return [org_id] + all other org IDs that have an *accepted* inventory_share
+    link with this org covering the requested inventory_type.
+
+    inventory_type values: 'hotels', 'packages', 'tickets'
+    """
+    from app.config.database import Collections as _C, db_config as _db
+
+    # Find all active accepted links where this org is one of the two parties
+    links_col = _db.get_collection(_C.ORG_LINKS)
+    links = await links_col.find({
+        "$or": [{"org_low_id": org_id}, {"org_high_id": org_id}],
+        "status": "accepted",
+        "is_active": True,
+    }).to_list(length=100)
+
+    linked_org_ids = []
+    for link in links:
+        other = link["org_high_id"] if link["org_low_id"] == org_id else link["org_low_id"]
+        linked_org_ids.append(other)
+
+    if not linked_org_ids:
+        return [org_id]
+
+    # Check which linked orgs have an accepted inventory_share for this type
+    shares_col = _db.get_collection(_C.INVENTORY_SHARES)
+    shared_orgs = []
+    for other_id in linked_org_ids:
+        share = await shares_col.find_one({
+            "$or": [
+                {"from_org_id": org_id, "to_org_id": other_id},
+                {"from_org_id": other_id, "to_org_id": org_id},
+            ],
+            "status": "active",
+            "is_active": True,
+            "inventory_types": inventory_type,
+        })
+        if share:
+            shared_orgs.append(other_id)
+
+    return [org_id] + shared_orgs
+
+
+# ─── Branch-level RBAC helpers ────────────────────────────────────────────────
+
+async def has_branch_permission(current_user: Dict, permission_code: str) -> bool:
+    """
+    Async check using the full RBAC resolution chain:
+      super admin → branch manager → override → role → deny
+
+    Use this inside route handlers when you need a soft check (return bool).
+    For a hard dependency (raise 403), use ``require_permission`` from
+    app.rbac.service instead.
+    """
+    # Circular import guard – import here, not at module top
+    from app.rbac.service import has_permission, _is_super_admin  # noqa: F401
+
+    if _is_super_admin(current_user):
+        return True
+
+    emp_id = current_user.get("emp_id") or current_user.get("_id") or ""
+    branch = current_user.get("branch_id") or current_user.get("entity_id") or ""
+    org    = current_user.get("organization_id") or ""
+
+    if not emp_id or not branch:
+        return False
+
+    return await has_permission(emp_id, branch, org, permission_code)
+
+
+def get_branch_id(current_user: Dict) -> str:
+    """
+    Extract the branch_id from the JWT payload.
+    Returns empty string if not a branch-scoped token.
+    """
+    return str(
+        current_user.get("branch_id")
+        or current_user.get("entity_id")
+        or ""
+    )
+
+
+async def require_branch_permission(permission_code: str):
+    """
+    FastAPI dependency factory – raises HTTP 403 if permission not granted.
+
+    Usage::
+
+        @router.get("/payments")
+        async def list_payments(
+            _=Depends(require_branch_permission("payments.view")),
+            current_user=Depends(get_current_user),
+        ):
+            ...
+    """
+    from app.rbac.service import require_permission  # noqa: F401
+    return require_permission(permission_code)
