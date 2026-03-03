@@ -63,7 +63,7 @@ async def expire_overdue_bookings() -> None:
             )
 
     if total_expired:
-        print(f"⏰ Booking Expiry Scheduler: {total_expired} booking(s) marked as expired.")
+        print(f" Booking Expiry Scheduler: {total_expired} booking(s) marked as expired.")
 
 
 async def run_expiry_scheduler(interval_seconds: int = 60) -> None:
@@ -71,7 +71,7 @@ async def run_expiry_scheduler(interval_seconds: int = 60) -> None:
     Infinite loop that calls expire_overdue_bookings() every `interval_seconds`.
     Designed to be launched as an asyncio background task from the app lifespan.
     """
-    print(f"🕐 Booking Expiry Scheduler started (interval: {interval_seconds}s)")
+    print(f" Booking Expiry Scheduler started (interval: {interval_seconds}s)")
     # Run once immediately on startup to catch any already-expired bookings
     await expire_overdue_bookings()
     while True:

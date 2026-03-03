@@ -110,7 +110,7 @@ async def _get_commission_rule(group_id: Optional[str], expected_type: Optional[
             # Try finding it without type check just to log a warning if it exists but type is wrong
             exists_with_wrong_type = await coll.find_one({"_id": ObjectId(group_id)})
             if exists_with_wrong_type:
-                print(f"⚠️  Commission group {group_id} found but type is '{exists_with_wrong_type.get('applied_to')}', expected '{expected_type}'")
+                print(f"  Commission group {group_id} found but type is '{exists_with_wrong_type.get('applied_to')}', expected '{expected_type}'")
         
         return serialize_doc(doc) if doc else None
     except Exception:
@@ -160,11 +160,23 @@ async def create_commission_records(
         role        = current_user.get("role")
         agency_type = current_user.get("agency_type")
         entity_type = current_user.get("entity_type")
-        branch_id   = current_user.get("branch_id")
+        user_type   = current_user.get("user_type")  # 'employee' set by employee login
+        # For branch employees, branch_id may be empty in token — actual branch is entity_id
+        _raw_branch_id = current_user.get("branch_id")
+        branch_id = (
+            _raw_branch_id if _raw_branch_id
+            else current_user.get("entity_id") if entity_type == "branch"
+            else None
+        )
         agency_id   = current_user.get("agency_id") or (
             current_user.get("sub") if role == "agency" else None
         )
-        employee_id = current_user.get("sub") if role == "employee" else None
+        # employee_id: set for direct 'employee' role, or any branch/org user_type='employee'
+        employee_id = (
+            current_user.get("sub") if role == "employee"
+            else current_user.get("_id") if user_type == "employee"
+            else None
+        )
 
         booking_id  = str(booking.get("_id", ""))
         booking_ref = booking.get("booking_reference", booking_id)
@@ -180,15 +192,26 @@ async def create_commission_records(
         # ── Determine earners ──────────────────────────────────────────────────
         earners_to_create = []  # list of (earner_type, earner_id, earner_name, group_id)
 
+        # A branch employee: has entity_type='branch' AND user_type='employee'
+        is_branch_employee = (user_type == "employee") and (entity_type == "branch")
         is_branch_user   = (role == "branch") or (entity_type == "branch")
-        is_employee      = (role == "employee")
+        is_employee      = (role == "employee") or is_branch_employee
         is_area_agency   = (role == "agency") and (agency_type == "area")
         is_full_agency   = (role == "agency") and (agency_type != "area")
         is_org_employee  = is_employee and (entity_type == "organization")
 
         if is_full_agency:
-            # Full agencies are discount-based; no commission records
-            return
+            # Full agencies are discount-based themselves, so they do NOT get a commission record.
+            # However, their Parent Branch (if any) DOES earn a commission if they have a group assigned.
+            if branch_id:
+                branch = await _get_branch(branch_id)
+                if branch:
+                    earners_to_create.append((
+                        "branch",
+                        branch_id,
+                        branch.get("name", "Branch"),
+                        branch.get("commission_group_id"),
+                    ))
 
         if is_area_agency:
             # Area Agency earns
@@ -212,26 +235,19 @@ async def create_commission_records(
                     ))
 
         elif is_employee and not is_org_employee:
-            # Branch Employee earns (using their group_id)
-            employee = await _get_employee(employee_id)
+            # Branch Employee earns — ONLY the employee, NOT the branch
+            print(f"DEBUG commission: is_branch_employee={is_branch_employee}, employee_id={employee_id}, user_type={user_type}, entity_type={entity_type}")
+            employee = await _get_employee(employee_id) if employee_id else None
+            if not employee and employee_id:
+                print(f" Employee {employee_id} not found for commission")
             if employee:
                 earners_to_create.append((
                     "employee",
                     employee_id,
-                    employee.get("name", "Employee"),
-                    employee.get("group_id"),
+                    employee.get("name") or employee.get("full_name", "Employee"),
+                    employee.get("commission_group_id") or employee.get("group_id"),
                 ))
-            # Branch also earns
-            emp_branch_id = branch_id or current_user.get("entity_id") if entity_type == "branch" else None
-            if emp_branch_id:
-                branch = await _get_branch(emp_branch_id)
-                if branch:
-                    earners_to_create.append((
-                        "branch",
-                        emp_branch_id,
-                        branch.get("name", "Branch"),
-                        branch.get("commission_group_id"),
-                    ))
+            # Branch does NOT earn when an employee books
 
         elif is_org_employee:
             # Org Employee earns
@@ -300,8 +316,8 @@ async def create_commission_records(
             }
 
             await coll.insert_one(record)
-            print(f"💰 Commission created: {earner_type} '{earner_name}' earns {amount} for booking {booking_ref}")
+            print(f" Commission created: {earner_type} '{earner_name}' earns {amount} for booking {booking_ref}")
 
     except Exception as e:
         # Never block a booking due to commission errors
-        print(f"⚠️ Commission engine warning for booking {booking.get('booking_reference','?')}: {e}")
+        print(f" Commission engine warning for booking {booking.get('booking_reference','?')}: {e}")

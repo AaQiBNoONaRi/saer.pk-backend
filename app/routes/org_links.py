@@ -103,14 +103,14 @@ async def send_link_request(
 async def get_my_links(current_user: dict = Depends(get_current_user)):
     """Get all links (sent and received) for the current organization"""
     org_id = _get_current_org_id(current_user)
-    print(f"🔍 Fetching links for org_id: {org_id}")
+    print(f" Fetching links for org_id: {org_id}")
     links = await db_ops.get_all(Collections.ORG_LINKS, {
         "$and": [
             {"$or": [{"org_low_id": org_id}, {"org_high_id": org_id}]},
             {"is_active": True}
         ]
     })
-    print(f"🔍 Found {len(links)} links")
+    print(f" Found {len(links)} links")
     return serialize_docs(links)
 
 

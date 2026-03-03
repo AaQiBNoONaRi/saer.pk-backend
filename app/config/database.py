@@ -12,8 +12,9 @@ class DatabaseConfig:
     """MongoDB database configuration"""
     
     def __init__(self):
-        self.MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+        self.MONGO_URI = os.getenv("MONGO_URI", "mongodb://rafay:R%40fay_25018%23Secure2026%21@16.171.132.125:25018/admin?authSource=admin")
         self.DATABASE_NAME = os.getenv("DATABASE_NAME", "saerpk_db")
+        
         self.client: Optional[AsyncIOMotorClient] = None
         self.database = None
     
@@ -91,7 +92,6 @@ class Collections:
     BOOKING_EXPIRY = "booking_expiry"
     SERVICE_CHARGES = "service_charges"
     COMMISSIONS = "commissions"
-    COMMISSION_RECORDS = "commission_records"
     DISCOUNTS = "discounts"
     DISCOUNTED_HOTELS = "discounted_hotels"
     # Org linking and inventory sharing
@@ -137,3 +137,7 @@ class Collections:
     CHART_OF_ACCOUNTS = "chart_of_accounts"
     JOURNAL_ENTRIES = "journal_entries"
     AUDIT_TRAIL = "audit_trail"
+
+    # Branch RBAC Collections
+    BRANCH_ROLES = "branch_roles"
+    EMPLOYEE_PERMISSION_OVERRIDES = "employee_permission_overrides"

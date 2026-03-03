@@ -27,3 +27,13 @@ from . import payment
 from . import pax_movement
 from . import operations
 from . import hr
+from . import commission_records
+from . import booking
+from . import customers
+from . import leads
+from . import passport_leads
+from . import role_groups
+from . import tasks
+from . import debug
+from . import discounted_hotels
+from . import ticket_inventory

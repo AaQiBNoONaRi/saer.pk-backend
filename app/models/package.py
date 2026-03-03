@@ -56,7 +56,6 @@ class PackageBase(BaseModel):
     visa_pricing: Dict[str, float] = Field(default={})
     package_prices: Optional[Dict[str, Any]] = Field(default={})
     is_active: bool = True
-    public_active: bool = False
 
 class PackageCreate(PackageBase):
     pass
@@ -73,7 +72,6 @@ class PackageUpdate(BaseModel):
     visa_pricing: Optional[Dict[str, float]] = None
     package_prices: Optional[Dict[str, Any]] = None
     is_active: Optional[bool] = None
-    public_active: Optional[bool] = None
 
 class PackageResponse(PackageBase):
     id: str = Field(alias="_id")

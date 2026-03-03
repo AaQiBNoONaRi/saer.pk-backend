@@ -2,7 +2,7 @@
 Hotel model and schemas
 """
 from pydantic import BaseModel, Field, field_validator
-from typing import List, Optional, Any, Dict
+from typing import List, Optional, Any, Dict, Union
 from datetime import datetime, date
 
 class ContactDetail(BaseModel):
@@ -24,6 +24,27 @@ class BedPriceDetail(BaseModel):
     selling_price: float = Field(ge=0)
     room_only_price: float = Field(default=0, ge=0)
 
+def _coerce_to_date(v):
+    """Convert datetime / ISO string with timezone to a plain date."""
+    if v is None:
+        return v
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date):
+        return v
+    if isinstance(v, str):
+        # strip timezone, parse just the date part
+        try:
+            return datetime.fromisoformat(v.replace('Z', '+00:00')).date()
+        except Exception:
+            pass
+        try:
+            return date.fromisoformat(v[:10])
+        except Exception:
+            pass
+    return v
+
+
 class HotelPrice(BaseModel):
     """Hotel pricing for a specific period and bed type"""
     date_from: Optional[date] = None
@@ -32,6 +53,11 @@ class HotelPrice(BaseModel):
     purchase_price: float = Field(default=0, ge=0)
     selling_price: float = Field(ge=0)
     room_only_price: float = Field(default=0, ge=0)
+
+    @field_validator('date_from', 'date_to', mode='before')
+    @classmethod
+    def coerce_price_dates(cls, v):
+        return _coerce_to_date(v)
 
 class HotelBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
@@ -58,6 +84,11 @@ class HotelBase(BaseModel):
         if v is not None:
             return str(v)
         return v
+
+    @field_validator('available_from', 'available_until', mode='before')
+    @classmethod
+    def coerce_availability_dates(cls, v):
+        return _coerce_to_date(v)
 
     @field_validator('available_until', mode='after')
     @classmethod

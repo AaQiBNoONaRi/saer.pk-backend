@@ -41,6 +41,7 @@ class CommissionRecord(BaseModel):
 
 class CommissionRecordResponse(CommissionRecord):
     id: str = Field(alias="_id")
+    booking_status: Optional[str] = None
 
     class Config:
         populate_by_name = True

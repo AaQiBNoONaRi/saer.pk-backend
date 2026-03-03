@@ -14,6 +14,9 @@ from app.routes import (
     branch,
     agency,
     employee,
+    # Branch-level RBAC
+    branch_roles,
+    employee_permissions,
     hotel, # Old name, might need rename if I changed the file name
     flight,
     transport,
@@ -24,7 +27,6 @@ from app.routes import (
     agency_auth,
     discount,
     commission,
-    commission_records,
     service_charge,
     # Hotel PMS Routers
     hotel_category,
@@ -60,7 +62,7 @@ from app.routes import (
     inventory_shares,
 )
 from app.finance import routes as finance_routes
-from app.routes import debug
+from app.routes import debug, dashboard
 
 
 @asynccontextmanager
@@ -112,6 +114,36 @@ app.add_middleware(
         "http://127.0.0.1:5180",
         "http://127.0.0.1:5181",
         "http://127.0.0.1:5182",
+        "http://192.168.1.11:5173",
+        "http://192.168.1.11:5174",
+        "http://192.168.1.11:5175",
+        "http://192.168.1.11:5176",
+        "http://192.168.1.11:5177",
+        "http://192.168.1.11:5178",
+        "http://192.168.1.11:5179",
+        "http://192.168.1.11:5180",
+        "http://192.168.1.11:5181",
+        "http://192.168.1.11:5182",
+        "http://172.21.192.1:5173",
+        "http://172.21.192.1:5174",
+        "http://172.21.192.1:5175",
+        "http://172.21.192.1:5176",
+        "http://172.21.192.1:5177",
+        "http://172.21.192.1:5178",
+        "http://172.21.192.1:5179",
+        "http://172.21.192.1:5180",
+        "http://172.21.192.1:5181",
+        "http://172.21.192.1:5182",
+        "http://192.168.160.1:5173",
+        "http://192.168.160.1:5174",
+        "http://192.168.160.1:5175",
+        "http://192.168.160.1:5176",
+        "http://192.168.160.1:5177",
+        "http://192.168.160.1:5178",
+        "http://192.168.160.1:5179",
+        "http://192.168.160.1:5180",
+        "http://192.168.160.1:5181",
+        "http://192.168.160.1:5182",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -166,7 +198,6 @@ app.include_router(service_charge.router, prefix="/api")
 # Discounted Hotels
 from app.routes import discounted_hotels
 app.include_router(discounted_hotels.router, prefix="/api")
-app.include_router(commission_records.router, prefix="/api")
 app.include_router(blog.router, prefix="/api")
 app.include_router(form.router, prefix="/api")
 app.include_router(bank_account.router, prefix="/api")
@@ -198,8 +229,15 @@ app.include_router(hr.router, prefix="/api")
 app.include_router(org_links.router, prefix="/api")
 app.include_router(inventory_shares.router, prefix="/api")
 
+# Dashboard
+app.include_router(dashboard.router, prefix="/api")
+
 # Finance & Accounting Module
 app.include_router(finance_routes.router, prefix="/api")
+
+# Branch-level RBAC
+app.include_router(branch_roles.router, prefix="/api")
+app.include_router(employee_permissions.router, prefix="/api")
 
 
 
