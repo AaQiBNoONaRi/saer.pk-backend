@@ -12,7 +12,7 @@ class DatabaseConfig:
     """MongoDB database configuration"""
     
     def __init__(self):
-        self.MONGO_URI = os.getenv("MONGO_URI", "mongodb://rafay:R%40fay_25018%23Secure2026%21@16.171.132.125:25018/admin?authSource=admin")
+        self.MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/admin?authSource=admin")
         self.DATABASE_NAME = os.getenv("DATABASE_NAME", "saerpk_db")
         
         self.client: Optional[AsyncIOMotorClient] = None
@@ -92,6 +92,7 @@ class Collections:
     BOOKING_EXPIRY = "booking_expiry"
     SERVICE_CHARGES = "service_charges"
     COMMISSIONS = "commissions"
+    COMMISSION_RECORDS = "commission_records"
     DISCOUNTS = "discounts"
     DISCOUNTED_HOTELS = "discounted_hotels"
     # Org linking and inventory sharing

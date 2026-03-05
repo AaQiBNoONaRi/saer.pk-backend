@@ -11,7 +11,7 @@ from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/service-charges", tags=["Service Charges"])
 
-@router.post("/", response_model=ServiceChargeResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_service_charge(
     service_charge: ServiceChargeCreate,
     current_user: dict = Depends(get_current_user)
@@ -28,7 +28,7 @@ async def create_service_charge(
     created_service_charge = await db_ops.create(Collections.SERVICE_CHARGES, service_charge_dict)
     return serialize_doc(created_service_charge)
 
-@router.get("/", response_model=List[ServiceChargeResponse])
+@router.get("/")
 async def get_service_charges(
     skip: int = 0,
     limit: int = 100,
@@ -46,7 +46,7 @@ async def get_service_charges(
     service_charges = await db_ops.get_all(Collections.SERVICE_CHARGES, filter_query=filter_query, skip=skip, limit=limit)
     return serialize_docs(service_charges)
 
-@router.get("/{service_charge_id}", response_model=ServiceChargeResponse)
+@router.get("/{service_charge_id}")
 async def get_service_charge(
     service_charge_id: str,
     current_user: dict = Depends(get_current_user)
@@ -60,7 +60,7 @@ async def get_service_charge(
         )
     return serialize_doc(service_charge)
 
-@router.put("/{service_charge_id}", response_model=ServiceChargeResponse)
+@router.put("/{service_charge_id}")
 async def update_service_charge(
     service_charge_id: str,
     service_charge_update: ServiceChargeUpdate,

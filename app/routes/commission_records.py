@@ -20,7 +20,7 @@ router = APIRouter(prefix="/commission-records", tags=["Commission Records"])
 
 # ─── List ─────────────────────────────────────────────────────────────────────
 
-@router.get("/", response_model=List[CommissionRecordResponse])
+@router.get("/")
 async def list_commission_records(
     status_filter: Optional[str] = Query(None, alias="status"),
     earner_type:   Optional[str] = None,

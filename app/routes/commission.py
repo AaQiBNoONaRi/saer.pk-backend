@@ -11,7 +11,7 @@ from app.utils.auth import get_current_user
 
 router = APIRouter(prefix="/commissions", tags=["Commissions"])
 
-@router.post("/", response_model=CommissionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_commission(
     commission: CommissionCreate,
     current_user: dict = Depends(get_current_user)
@@ -21,7 +21,7 @@ async def create_commission(
     created_commission = await db_ops.create(Collections.COMMISSIONS, commission_dict)
     return serialize_doc(created_commission)
 
-@router.get("/", response_model=List[CommissionResponse])
+@router.get("/")
 async def get_commissions(
     skip: int = 0,
     limit: int = 100,
@@ -39,7 +39,7 @@ async def get_commissions(
     commissions = await db_ops.get_all(Collections.COMMISSIONS, filter_query=filter_query, skip=skip, limit=limit)
     return serialize_docs(commissions)
 
-@router.get("/{commission_id}", response_model=CommissionResponse)
+@router.get("/{commission_id}")
 async def get_commission(
     commission_id: str,
     current_user: dict = Depends(get_current_user)
@@ -53,7 +53,7 @@ async def get_commission(
         )
     return serialize_doc(commission)
 
-@router.put("/{commission_id}", response_model=CommissionResponse)
+@router.put("/{commission_id}")
 async def update_commission(
     commission_id: str,
     commission_update: CommissionUpdate,
